@@ -1,0 +1,42 @@
+---
+title: Pipelines & Argument Encoding
+description: Learn how MTIFunctionDescriptor values become device-specific pipeline state and name-based argument encoding.
+---
+
+A render or compute kernel holds `MTIFunctionDescriptor` values. `MTIContext` turns those descriptors into Metal functions and caches the pipeline objects for its device. The kernel holds the program, while device-specific pipeline objects live on the context.
+
+## Function descriptors
+
+A descriptor has a function name, optional `MTLFunctionConstantValues`, and a library URL. The context loads or reuses that library, creates the specialized function, and keeps the mapping in its function cache. Built-in descriptors point at Raster's default library, and downstream descriptors point at the bundle that owns their `.metallib`.
+
+Function constants are part of descriptor identity. Two kernels that name the same function with different constants resolve to different Metal functions and different pipeline state.
+
+## Pipeline state
+
+`MTIRenderPipelineKernel` builds a pipeline descriptor from its vertex and fragment functions, vertex descriptor, attachment formats, depth/stencil formats, and raster sample count. Compute kernels follow a different path: `MTIComputePipelineKernel` builds the compute descriptor and picks dispatch geometry from explicit options or the pipeline state's execution width.
+
+The context caches kernel state under the kernel and the configuration, and that pair is the cache key. Attachment pixel format and sample count live on that render configuration, because they change which pipeline object you get.
+
+## Texture binding
+
+Render and compute recipes resolve their declared input images before encoding. Textures bind in input order. Render inputs also get samplers. Compute output sits after the input textures at the next texture index. That positional texture binding is separate from the name-based buffer-argument dictionary.
+
+## Argument encoding
+
+`MTIFunctionArgumentsEncoder` walks Metal reflection arguments, finds a value with the same name, checks the expected data type and size, then calls the matching vertex, fragment, compute, or tile encoder method. Scalars and small values use `set*Bytes`. `MTIDataBuffer` values allocate or supply an `MTLBuffer` and then bind it with `set*Buffer`.
+
+Direct SIMD support is generated. Swift and Metal share many vector names, and the encoder still has to hit the exact alignment and byte count. A mismatch fails with a Raster error, and the encoder refuses to write arbitrary bytes into the command encoder.
+
+Today that path still uses the `MTLArgument` API. Moving to newer Metal binding reflection is a contained modernization project, and it still has to keep the public parameter dictionary, generated SIMD coverage, tile/compute/render routing, and error behavior.
+
+## Source
+
+```text
+Frameworks/Raster/MTIFunctionDescriptor.*             Function identity and library URL
+Frameworks/Raster/MTIContext.m                        Library, function, and pipeline caches
+Frameworks/Raster/Kernels/MTIRenderPipelineKernel.m   Render recipes and state creation
+Frameworks/Raster/Kernels/MTIComputePipelineKernel.m  Compute recipes and dispatch
+Frameworks/Raster/MTIFunctionArgumentsEncoder.m       Reflection and value encoding
+Frameworks/Raster/MTISIMDArgumentEncoder.swift        Generated SIMD handling
+Tests/RasterTests/UtilitiesTests.swift                 Argument layout and failure coverage
+```

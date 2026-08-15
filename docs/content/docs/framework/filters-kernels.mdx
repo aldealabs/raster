@@ -1,0 +1,57 @@
+---
+title: Filters & Kernels
+description: Learn how a mutable filter and a shared GPU program produce an immutable output image.
+---
+
+A filter holds images and parameters and exposes an output image. The filter object is small and mutable. A kernel is the GPU program reused across every filter instance that needs it. Those roles stay separate so you can change a filter's parameters without recompiling shaders or rebuilding pipeline state every time you create another filter instance.
+
+## Filters
+
+`MTIFilter` has an `outputPixelFormat` and a nullable `outputImage`, and `MTIUnaryFilter` adds one `inputImage`. Concrete filters expose the parameters their operation needs:
+
+```swift
+let filter = MTIVibranceFilter()
+filter.inputImage = input
+filter.amount = 0.45
+filter.outputPixelFormat = .rgba16Float
+
+guard let output = filter.outputImage else {
+    throw PipelineError.imageUnavailable
+}
+```
+
+`outputImage` is usually `nil` when a required input is missing or the requested dimensions are invalid. Reading it snapshots the current configuration into a recipe. Changing the filter afterward does not change the image you already took.
+
+Filters are not thread-safe. Their inputs and parameters mutate. A filter belongs on a single actor, queue, or lock-protected path. The output `MTIImage` is immutable, so you can hand it across that boundary.
+
+## Kernels
+
+Raster ships several kernel families:
+
+| Kernel | Use it for |
+| --- | --- |
+| `MTIRenderPipelineKernel` | Vertex/fragment work, blending, multiple render targets, and draw geometry. |
+| `MTIComputePipelineKernel` | General compute grids and writable output textures. |
+| `MTIMPSKernel` | Operations implemented with Metal Performance Shaders. |
+| `MTICoreImageKernel` | A Core Image operation inside a Raster graph. |
+
+A kernel holds function descriptors and pipeline configuration, while `apply` calls pass input images, parameter values, and output descriptors. Filters typically store that kernel on the class in static storage so every instance shares the same program description.
+
+## Function descriptors
+
+`MTIFunctionDescriptor` names a Metal function, optional function constants, and the library that contains it. Built-in filters use Raster's default library. A custom filter points at the bundle that has its compiled Metal library. `Bundle.main` is often some other app and has nothing to do with the shader source:
+
+```swift
+let fragment = MTIFunctionDescriptor(
+    name: "vignette",
+    bundle: Bundle(for: ShaderBundleToken.self)
+)
+```
+
+The right bundle matters in test hosts, extensions, dynamic frameworks, and Swift packages.
+
+## Output descriptors
+
+Render and compute kernels need texture dimensions and a pixel format. Render-pass output descriptors also set load and store actions, which is how you get multiple draw calls in one pass. Alpha lives on the image. Texture descriptors leave it alone.
+
+See [Custom Filters](/docs/guides/custom-filters) for an end-to-end downstream implementation and [Pipelines & Argument Encoding](/docs/internals/pipelines-argument-encoding) before you change kernel internals.

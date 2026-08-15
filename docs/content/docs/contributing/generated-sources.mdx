@@ -1,0 +1,44 @@
+---
+title: Generated Sources
+description: Learn how Raster generates package and shader sources, and how two complete passes prove the output is stable.
+---
+
+Generated source is checked in because it is part of Raster's package and shader ABI. Those files are reviewed the same way compiled interface material is reviewed. The generated diff is the evidence. The fix belongs in the generator or the canonical source, not in a hand-edit of the output.
+
+## Generation sequence
+
+```bash
+swift run --package-path Utilities main boilerplate-generator "$PWD"
+swift run --package-path Utilities main umbrella-header-generator "$PWD"
+swift run --package-path Utilities main swift-package-generator "$PWD"
+```
+
+The sequence runs from the repository root. The Swift package generator removes and recreates `Sources/`, so hand-authored files do not belong in that tree unless the generator knows how to reproduce them.
+
+## What each generator writes
+
+| Generator | Outputs |
+| --- | --- |
+| Boilerplate | Built-in blend shaders, multilayer shaders, custom blend wrappers, SIMD vector helpers, and argument encoders. |
+| Umbrella header | The public Objective-C umbrella assembled from canonical headers. |
+| Swift package | Target symlinks, flat and namespaced headers, module map, and embedded built-in Metal source. |
+
+## Generated diffs
+
+On a blend change, the useful check is that all built-in modes appear in both two-image and multilayer output, the old and headroom-aware shader overloads remain paired, and custom formulas still call two arguments. Package layout changes need every symlink to resolve, and the flat and namespaced header sets have to match.
+
+## Idempotence
+
+The three generators run twice from the same starting checkout. After each pass, the comparison uses the three artifacts below.
+
+- `git status --porcelain=v1 -uall`
+- a binary `git diff`
+- the complete symlink manifest when package layout changed
+
+The second pass must not reorder output, alter timestamps in tracked content, create an additional file, or repair the first pass. CI implements this as a hard gate.
+
+<Aside title="A clean diff can still miss a file" tone="warning">
+  `git diff` ignores untracked output. A status check that includes all untracked paths is the pair for `git diff`, especially when a generator creates headers or symlinks.
+</Aside>
+
+The architecture behind these outputs is on [Shader Generation](/docs/internals/shader-generation).

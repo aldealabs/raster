@@ -1,0 +1,43 @@
+---
+title: Render Graphs & Caching
+description: Learn how Raster walks an image graph, shares work across branches, and decides which textures stay alive.
+---
+
+Every output `MTIImage` points to a promise, and every promise names its input images. Those dependencies form a directed graph whose root is the image you render. Raster only evaluates the part reachable from that root, so unused candidate images cost almost nothing beyond the small recipe objects.
+
+## Cache policy
+
+The default `.transient` cache policy means a resolved texture may go back to the pool once the current render is done with it. That is the usual choice for intermediates. The context can keep a small working set and reuse it as dependencies drop off.
+
+```swift
+let transient = filter.outputImage!
+```
+
+`.persistent` is useful when the same expensive intermediate shows up in separate output requests and keeping the texture beats recomputing it:
+
+```swift
+let prepared = expensiveFilter.outputImage!
+    .withCachePolicy(.persistent)
+```
+
+Persistence spends memory to save compute. It is a trade for a specific intermediate you will reuse across separate renders. Persisting a whole graph stops the texture pool from doing its job, and persisting every frame holds a texture after the frame that needed it. On video paths, images typically stay transient and the result is written into a pixel-buffer pool whose capacity you control.
+
+## How branches share results
+
+```text
+                  ┌─▶ blur ───────────┐
+input ─▶ exposure ┤                    ├─▶ composite
+                  └─▶ color matrix ───┘
+```
+
+Within one render, the dependency map resolves the shared exposure promise once. Both branches get the same result. Raster keeps that result alive until the last consumer has encoded. Two separately constructed exposure filters that happen to use the same numbers are two promises and two pieces of work. Building the prefix once and feeding that output image into each branch is what shares the result.
+
+## Graph optimization
+
+When `enablesRenderGraphOptimization` is on, Raster asks eligible promises whether they can concatenate with an upstream recipe. The optimizer rebuilds the graph with updated dependencies. It keeps a boundary when state differs. Blend recipes with different HDR headroom must not fuse, because each one is treating a different range of values as the top of its scale.
+
+Optimization is opt-in and lives on the context. Production pipelines usually turn it on after the tests that matter to you have run on the optimized path. A graph rewrite can trip assumptions in a custom promise even when the built-in promises are fine.
+
+<Aside title="Cache identity follows the promise" tone="note">
+  Raster deduplicates the same promise object during one evaluation. It does not hash independently constructed filters to see if they mean the same thing. That would be unsafe for custom promises with external state.
+</Aside>

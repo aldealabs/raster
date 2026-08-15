@@ -1,0 +1,56 @@
+---
+title: Tests & CI
+description: Learn how Raster's local and hosted gates split work across package tests, platform destinations, and clean consumers.
+---
+
+Raster's tests are split because no single build exercises Swift, Objective-C, Metal source, generated package layout, application resources, and every Apple platform. A green unit suite proves rendering behavior inside the package. Downstream shaders still have to compile against the public header in their own client.
+
+## Root SwiftPM suite
+
+```bash
+swift build
+swift test
+```
+
+The suite covers context creation, image loading, render and compute kernels, Core Image extents, blend and composition math, HDR headroom, CLAHE, alpha behavior, graph optimization, argument encoding, scene renderers, YCbCr paths, and utilities. Exact pixel fixtures belong where the result is deterministic. Bounded tolerances belong where an Apple framework or a GPU implementation is the source of numerical variation.
+
+## Local platform matrix
+
+```bash
+bash test.sh
+```
+
+The script performs two generator passes and compares both repository status and binary diffs against the starting checkout. It then runs the 64-node optimizer regression with an external five-second test timeout, then exercises macOS SwiftPM, iOS Simulator, Mac Catalyst, tvOS Simulator when installed, and generic iOS and tvOS device builds.
+
+A missing local simulator is an explicit skip only when the device inventory is genuinely empty. Tool failures, malformed `simctl` output, and build failures remain failures. When Xcode exposes the tvOS SDK but marks the generic device destination unavailable because the platform component is missing, the local script performs an arm64 tvOS cross-build. Hosted CI keeps the strict generic destination gate.
+
+## Consumer integration
+
+```bash
+bash Scripts/test-integration.sh
+```
+
+This gate builds and runs a standalone Swift executable so built-in shader library loading is exercised at runtime, then separately builds Objective-C and downstream Metal Xcode clients, then the unsigned iOS example. Every client uses an isolated scratch and package-resolution directory. The checkout stays byte-for-byte unchanged.
+
+The macOS example is opt-in under Xcode 26 because its pinned VideoIO 2.0.3 dependency declares a stored property unavailable on macOS in a form the compiler rejects. The pin stays recorded, and Raster's test script does not patch VideoIO.
+
+## Hosted workflow
+
+The SwiftPM workflow uses separate jobs for generator drift, macOS tests, iOS and tvOS simulators, Catalyst, generic devices, integration consumers, and the runner-default current Xcode. Primary jobs pin their Xcode version. The current-Xcode job reveals forward compatibility without making every gate nondeterministic at once.
+
+Hosted simulator jobs fail when no runtime is available. A runner image advertised for the workflow must provide the platform it claims to test.
+
+## Where to put regressions
+
+A public initializer ambiguity belongs in a consumer-compilation test. A Core Image extent bug belongs in a render test with translated and infinite fixtures. Generated Metal include bugs belong in the ShaderClient. The useful place for a regression is the boundary where the broken behavior shows up, with the smallest fixture that still shows it.
+
+## Where to look
+
+```text
+Tests/RasterTests/                  Package behavior tests
+Tests/Integration/                     Clean package consumers
+test.sh                                Local platform matrix
+Scripts/test-integration.sh            Consumer and example gate
+.github/workflows/swift.yml            Hosted matrix
+Scripts/verify-release.sh              Clean release evidence driver
+```

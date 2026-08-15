@@ -1,0 +1,59 @@
+---
+title: Shader Arguments
+description: Learn how Raster encodes scalars, SIMD values, matrices, structs, textures, and mutable buffers by Metal argument name.
+---
+
+Render and compute kernels take a `[String: Any]` parameter dictionary. Raster reflects the Metal function, matches each buffer argument by name, checks the value's layout, and encodes it at that argument's buffer index. Texture and sampler inputs that come from `MTIImage` values stay on the kernel path and are not part of this dictionary.
+
+## Common mappings
+
+| Metal argument | Swift value | Objective-C value |
+| --- | --- | --- |
+| `float` | `Float` | `float` boxed as `NSNumber` |
+| `int` | `Int32` | `int32_t` boxed as `NSNumber` |
+| `uint` | `UInt32` | `uint32_t` boxed as `NSNumber` |
+| `bool` | `Bool` | `BOOL` boxed as `NSNumber` |
+| `float2`, `float4`, matrices, integer SIMD | Native SIMD value or `MTIVector` | `MTIVector` |
+| Immutable struct or pointer data | `Data` or `MTIDataBuffer` | `NSData` or `MTIDataBuffer` |
+| Mutable pointer data | `MTIDataBuffer` | `MTIDataBuffer` |
+
+Swift's `Int` follows the host word size and does not describe a Metal `int` argument reliably. Fixed-width integer types map to the Metal widths above.
+
+## Parameters
+
+```swift
+let transform = simd_float4x4(1)
+let parameters: [String: Any] = [
+    "amount": Float(0.75),
+    "transform": transform,
+    "enabled": true,
+]
+
+let output = kernel.apply(
+    to: input,
+    parameters: parameters,
+    outputPixelFormat: .rgba16Float
+)
+```
+
+```metal
+fragment float4 effect(
+    VertexOut vertexIn [[stage_in]],
+    texture2d<float> source [[texture(0)]],
+    sampler sourceSampler [[sampler(0)]],
+    constant float &amount [[buffer(0)]],
+    constant float4x4 &transform [[buffer(1)]],
+    constant bool &enabled [[buffer(2)]])
+```
+
+Dictionary keys have to match the compiled argument names. If Metal compiler options strip reflection information from a library, the name-based encoder cannot rebuild it later.
+
+## Struct layout
+
+When Swift, Objective-C, and Metal share a struct, the definition belongs in a header that both the host compiler and the Metal compiler include. SIMD and packed types whose alignment is explicit are the usual choice, then a host-side test for `MemoryLayout.size`, `stride`, and field offsets confirms the layout. `float3` is a common mismatch: its alignment is larger than the visible component count, so a struct with the same fields in the same textual order can still differ.
+
+## Mutable buffers
+
+`Data` is copied or treated as immutable input. `MTIDataBuffer` can represent storage that a shader mutates, or storage that stays stable across encodes. The buffer's lifetime and synchronization have to stay aligned with the command buffer. Mutating host memory while the GPU reads it is a data race, even when Swift's type system permits the reference.
+
+The encoder's implementation path is documented in [Pipelines & Argument Encoding](/docs/internals/pipelines-argument-encoding).

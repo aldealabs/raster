@@ -1,0 +1,42 @@
+{
+  "name": "raster-docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "lint": "eslint",
+    "validate": "node scripts/validate-docs.mjs",
+    "test:unit": "node --test scripts/validate-docs.test.mjs src/lib/code-highlighting.test.ts src/lib/theme-preference.test.ts",
+    "check": "npm run test:unit && npm run validate && npm run lint && npm run build"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "clsx": "^2.1.1",
+    "gray-matter": "^4.0.3",
+    "lucide-react": "^1.23.0",
+    "next": "^16.3.1",
+    "next-mdx-remote": "^6.0.0",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "rehype-autolink-headings": "^7.1.0",
+    "rehype-pretty-code": "^0.14.5",
+    "rehype-slug": "^6.0.0",
+    "remark-gfm": "^4.0.1",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^16.3.1",
+    "rehype-parse": "^9.0.1",
+    "rehype-stringify": "^10.0.1",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "unified": "^11.0.5"
+  }
+}

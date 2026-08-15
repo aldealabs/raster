@@ -1,0 +1,103 @@
+---
+title: Migrating from MetalPetal
+description: Learn how to move from the last MetalPetal compatibility release to Raster 2.x without renaming the MTI* types.
+---
+
+Raster is a maintained continuation of MetalPetal, based on the upstream 1.25.2 codebase and the Aldea-maintained 1.26 release. Raster 2.0 changes the package, product, module, and documentation name. It keeps `MTIImage`, `MTIContext`, `MTIFilter`, `MTIKernel`, and the related public `MTI*` names because those types still describe the framework and are deeply embedded in existing applications.
+
+## Version lines
+
+MetalPetal 1.26 is the last compatibility feature release. It remains available from this repository as the `MetalPetal` product and module. Its version range cannot cross the 2.0 major-version boundary, so an application pinned from `1.26.0` stays on MetalPetal compatibility releases until the dependency is edited.
+
+Raster starts at 2.0. New features, platform maintenance, and API evolution happen on that line.
+
+| Version | Package identity | Module | Maintenance |
+| --- | --- | --- | --- |
+| MetalPetal 1.26.x | `MetalPetal` | `MetalPetal` | Severe security or data-corruption fixes only. |
+| Raster 2.x | `Raster` | `Raster` | Active maintenance and production-led development. |
+
+## Swift Package Manager
+
+Before:
+
+```swift
+.package(
+    url: "https://github.com/aldealabs/raster.git",
+    from: "1.26.0"
+)
+```
+
+After:
+
+```swift
+.package(
+    url: "https://github.com/aldealabs/raster.git",
+    from: "2.0.0"
+)
+```
+
+The target product also changes from `MetalPetal` to `Raster`. Resolving packages from a clean checkout avoids stale build products that can make the old module look available.
+
+## Imports
+
+<Tabs defaultValue="swift" syncKey="migration-language">
+  <TabsList>
+    <TabsTrigger value="swift">Swift</TabsTrigger>
+    <TabsTrigger value="objective-c">Objective-C</TabsTrigger>
+    <TabsTrigger value="metal">Metal</TabsTrigger>
+  </TabsList>
+  <TabsContent value="swift">
+
+```swift diff
+-import MetalPetal
++import Raster
+
+ let context: MTIContext
+ let image: MTIImage
+```
+
+  </TabsContent>
+  <TabsContent value="objective-c">
+
+```objective-c diff
+-#import <MetalPetal/MetalPetal.h>
++#import <Raster/Raster.h>
+```
+
+  </TabsContent>
+  <TabsContent value="metal">
+
+```metal diff
+-#include <MetalPetal/MTIShaderLib.h>
++#include <Raster/MTIShaderLib.h>
+```
+
+  </TabsContent>
+</Tabs>
+
+If your target compiles Metal source, `MTL_HEADER_SEARCH_PATHS = "$(HEADER_SEARCH_PATHS)"` is still required. The setting forwards SwiftPM's resolved include paths to the Metal compiler after the namespace changes.
+
+## Behavior that stayed the same
+
+The 1.26 release added opt-in HDR headroom to blend, multilayer compositing, and CLAHE paths while preserving the old signatures and their `headroom == 1` behavior.
+
+Existing custom blend formulas keep their two-argument function.
+
+That release also made the filter graph's output-port connection machinery public, and repaired some modern image-loading and Core Image edge cases.
+
+Raster 2.x may add intentional compatibility breaks later. Those will be documented when they happen.
+
+## Upgrade checklist
+
+1. Change the dependency range and selected product.
+2. Replace Swift, Objective-C, and Metal module references together.
+3. Delete DerivedData or use a fresh build directory before diagnosing missing-module errors.
+4. Build at least one target that compiles your downstream `.metal` sources.
+5. Exercise representative SDR and HDR renders if your pipeline uses headroom.
+6. Compare alpha type, color space, and output pixel format at application boundaries.
+
+## MetalPetal
+
+MetalPetal was created and developed primarily by [YuAo](https://github.com/YuAo). Raster preserves that history in the Git repository and license, and it continues the framework. The rename gives ongoing maintenance a distinct home while leaving the original authorship visible.
+
+For the last compatibility release, see the repository's `CHANGELOG.md` and `RELEASE_NOTES_1.26.0.md`. Historical design discussions linked from this documentation may still point to the upstream MetalPetal repository when that is where the original reasoning lives.

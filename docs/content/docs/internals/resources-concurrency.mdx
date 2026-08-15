@@ -1,0 +1,51 @@
+---
+title: Resources & Concurrency
+description: Learn how the context lock, heap and device texture pools, and persistent caches share textures across concurrent renders.
+---
+
+`MTIContext` is thread-safe. Callers can use one context from several threads without adding their own global lock. The context still serializes the work that shares resolution and resource state. Caches are protected by the rendering lock.
+
+## Object-level concurrency
+
+| Object | Safe to share? |
+| --- | --- |
+| `MTIImage` | Yes. Immutable. |
+| `MTIFilter` instances | No. Configuration and `outputImage` access stay isolated. |
+| `MTIContext` | Yes. Rendering and cache work are synchronized. |
+| `MTLTexture` from external code | Access follows the producing queue or event. |
+| `MTIDataBuffer` | Host mutation is coordinated with every command buffer that reads or writes it. |
+
+The Swift filter graph builder has its own lock because it uses a scoped connection-building stack. The mutable filter objects passed into the builder stay unsafe for unrelated concurrent mutation. That lock only covers construction.
+
+## Texture retain counts
+
+`MTIReusableTexture` wraps a texture from the pool with a lock, a reference count, a validity flag, and a descriptor. A new target starts at one reference. Dependencies, persistent holders, and the root output retain and release that wrapper along the resolution path. When the count hits zero, the wrapper invalidates itself and the texture returns to the pool.
+
+A retain after invalidation is a bug, because the texture may already belong to a different recipe.
+
+## Pool implementations
+
+`MTIDeviceTexturePool` groups idle textures by `MTITextureDescriptor` and reuses an exact compatible allocation. `MTIHeapTexturePool` uses Metal heaps where the device and the descriptor allow it, and it falls back when they do not. Both report idle count and size. They flush through the context's resource-reclamation path.
+
+In-flight safety comes from the render-target reference count and the command-buffer lifecycle, which keep a texture out of the pool while an encoded consumer still needs it.
+
+## Persistent resolution caches
+
+Persistent images use weak-key/strong-value tables on the context. Weak keys can vanish, and the promise is the cache key. The resolution holder retains the texture, and when the weak key disappears or resources are reclaimed, the holder releases the target back into the pool.
+
+A large persistent graph also keeps its cache keys, so the textures stay allocated as well.
+
+## Memory warnings and explicit reclamation
+
+With `automaticallyReclaimsResources` enabled, the context listens for memory warnings and flushes idle state. Applications can also call `reclaimResources()` at stronger lifecycle boundaries. Calling it too often prevents pipeline and texture reuse from paying for the extra machinery.
+
+## Source
+
+```text
+Frameworks/Raster/MTIContext.m                    Locks, caches, and reclamation
+Frameworks/Raster/MTIImageRenderingContext.mm     Per-render ownership
+Frameworks/Raster/MTITexturePool.{h,mm}           Reusable texture implementations
+Frameworks/Raster/MTIWeakToStrongObjectsMapTable.* Persistent weak-key caches
+Frameworks/Raster/Filters/Filter.swift            Filter graph builder locking
+Frameworks/Raster/MTILock.*                       Lock abstraction
+```

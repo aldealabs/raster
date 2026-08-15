@@ -1,0 +1,11 @@
+module RasterObjectiveC {
+    explicit module Core {
+        header "Raster.h"
+        export *
+    }
+    explicit module Extension {
+        header "MTIContext+Internal.h"
+        header "MTIImage+Promise.h"
+        export *
+    }
+}

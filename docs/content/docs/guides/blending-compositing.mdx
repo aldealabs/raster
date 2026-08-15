@@ -1,0 +1,76 @@
+---
+title: Blending & Compositing
+description: Learn how to blend one image over another, or stack transformed layers, without losing alpha, range, masks, or layout.
+---
+
+`MTIBlendFilter` takes one foreground and one background. `MultilayerCompositingFilter` takes a background plus an ordered set of layers you can transform, mask, tint, or round. Both filters share the same blend-mode registry and HDR headroom.
+
+## Two-image blends
+
+`intensity` mixes the blend operation into the result and leaves source alpha as-is until compositing. `outputAlphaType` describes whatever comes next. `.alphaIsOne` forces output alpha to one, which is only appropriate when that fully opaque result is what you want.
+
+```swift
+let blend = MTIBlendFilter(blendMode: .screen)
+blend.inputBackgroundImage = background
+blend.inputImage = foreground
+blend.intensity = 0.65
+blend.outputAlphaType = .nonPremultiplied
+
+guard let output = blend.outputImage else {
+    throw PipelineError.imageUnavailable
+}
+```
+
+For extended-range pixels, a float-capable output format and a `headroom` that matches how far those stored values can go above 1 keep the values intact:
+
+```swift
+blend.outputPixelFormat = .rgba16Float
+blend.headroom = 4
+```
+
+The default `headroom` of 1 keeps the historical SDR formulas plus the existing call-site behavior those formulas already had.
+
+## Layer stacks
+
+`MultilayerCompositingFilter` composites an ordered list of layers over a background. Layer order is array order. A single layer can carry content region, frame, transform, opacity, blend mode, tint, mask, compositing mask, and rounded corners, so those properties do not each need a separate pass.
+
+```swift
+let compositing = MultilayerCompositingFilter()
+compositing.inputBackgroundImage = background
+compositing.layers = [
+    .init(content: watermark)
+        .frame(
+            CGRect(x: 0.72, y: 0.04, width: 0.24, height: 0.16),
+            layoutUnit: .fractionOfBackgroundSize
+        )
+        .opacity(0.8)
+        .blendMode(.normal),
+]
+
+let output = compositing.outputImage
+```
+
+The compositor uses programmable blending where available. When that is missing, a compatible fallback is selected so the same layer list still runs.
+
+## Masks
+
+The two mask slots do different jobs. A normal layer mask changes the layer's own visibility. A compositing mask controls where the composed layer affects the accumulated background. On a simple alpha mask they line up. They diverge once blend behavior and intermediate alpha start to matter in the stack.
+
+The channel you sample has to be the one that carries the signal. An opaque RGB mask with a white alpha channel produces no useful variation when you sample `.alpha`.
+
+## Custom blend formulas
+
+Custom blend modes take shader source. The historical two-argument function is the one Raster wraps:
+
+```metal
+float4 blend(float4 backdrop, float4 source) {
+    float luminance = dot(backdrop.rgb, float3(0.299, 0.587, 0.114));
+    return float4(mix(backdrop.rgb, float3(luminance), source.a), backdrop.a);
+}
+```
+
+Raster wraps that function for both the two-image filter and the multilayer compositor. Built-in HDR modes receive headroom through internal overloads. Consumer formulas stay two-argument. Raster will not rewrite them to take a third parameter, so a custom formula that needs HDR has to normalize inside the formula using a policy your app decides.
+
+<Aside title="Test blend math with translucent pixels" tone="tip">
+  Opaque red, green, and blue fixtures miss the interaction between blend RGB and source-over alpha. A partially transparent source, and values above 1 when the pipeline supports HDR, is what exercises that interaction.
+</Aside>

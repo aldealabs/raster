@@ -13,7 +13,7 @@ import UmbrellaHeaderGenerator
 
 struct Main: ParsableCommand {
     static var configuration = CommandConfiguration(
-        abstract: "Code Generator Utilities for MetalPetal.",
+        abstract: "Code Generator Utilities for Raster.",
         subcommands: [BoilerplateGenerator.self, SwiftPackageGenerator.self, UmbrellaHeaderGenerator.self],
         defaultSubcommand: nil)
 }

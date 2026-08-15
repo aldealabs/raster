@@ -29,15 +29,15 @@ public struct MTIVectorSIMDTypeSupportCodeGenerator {
         """
         //
         //  MTIVector+SIMD.h
-        //  MetalPetal
+        //  Raster
         //
         //  Created by Yu Ao on 2018/6/30.
         //
         //  Auto generated.
         
         #import <simd/simd.h>
-        #if __has_include(<MetalPetal/MetalPetal.h>)
-        #import <MetalPetal/MTIVector.h>
+        #if __has_include(<Raster/Raster.h>)
+        #import <Raster/MTIVector.h>
         #else
         #import "MTIVector.h"
         #endif
@@ -75,7 +75,7 @@ public struct MTIVectorSIMDTypeSupportCodeGenerator {
         """
         //
         //  MTIVector+SIMD.m
-        //  MetalPetal
+        //  Raster
         //
         //  Created by Yu Ao on 2018/6/30.
         //

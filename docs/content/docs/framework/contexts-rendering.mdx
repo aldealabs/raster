@@ -1,0 +1,53 @@
+---
+title: Contexts & Rendering
+description: Learn how an MTIContext turns image promises into Metal work, and where the rendered pixels land.
+---
+
+An `MTIContext` is the long-lived object that turns image promises into GPU work. It holds the Metal device and command queue, the built-in shader library, pipeline caches, a texture pool, a Core Image context, a texture loader, and the Core Video bridge. Creating one is expensive, so applications typically keep a single context for the life of a renderer or processing service and render through it again and again.
+
+```swift
+final class ImageRenderer {
+    let context: MTIContext
+
+    init(device: MTLDevice) throws {
+        let options = MTIContextOptions()
+        options.label = "com.example.image-renderer"
+        options.enablesRenderGraphOptimization = true
+        context = try MTIContext(device: device, options: options)
+    }
+}
+```
+
+The context is thread-safe. Reusing it across render requests keeps the caches warm and avoids parallel pools that fight over the same device memory.
+
+## Context options
+
+`MTIContextOptions` selects behavior that stays put for the life of the context:
+
+| Option | Consequence |
+| --- | --- |
+| `workingPixelFormat` | Default format for intermediate textures when a kernel does not specify one. |
+| `enablesRenderGraphOptimization` | Allows compatible recipes to fuse and the graph to be rebuilt before resolution. |
+| `automaticallyReclaimsResources` | Releases idle resources after memory warnings. |
+| `enablesYCbCrPixelFormatSupport` | Uses native YCbCr paths when the device and input permit them. |
+| `defaultLibraryURL` | Selects the Metal library used by built-in function descriptors. |
+| `texturePoolClass` | Replaces the default heap-backed or device texture pool. |
+| `coreVideoMetalTextureBridgeClass` | Chooses how pixel buffers are bridged to Metal textures. |
+
+Changing only `workingPixelFormat` does not change how your app treats color numbers. A float texture keeps values above 1. Color-space transforms and HDR headroom stay separate from that format choice.
+
+## Destinations
+
+`makeCGImage(from:)` returns a Core Graphics image synchronously. That is the usual path for a file, a test, or some other CPU API. `makeCIImage(from:)` puts the result into a Core Image graph and holds the Raster image long enough to render it. Video uses `render(_:to:)`, which writes a `CVPixelBuffer`. If you already have a Metal texture, `startTask(toRender:to:destinationAlphaType:completion:)` writes into that texture instead of creating another texture for you to manage. Drawable rendering drives `MTIImageView` and custom Metal presentation. `startTask(toRender:completion:)` evaluates an image without exposing a destination, which is useful when the promise itself has an external side effect.
+
+Asynchronous `startTask` APIs return an `MTIRenderTask`. That task is how you watch completion or line up downstream work without blocking the caller.
+
+## Reclaiming memory
+
+The texture pool keeps idle resources because allocation is expensive. `idleResourceCount` and `idleResourceSize` report what is sitting unused. `reclaimResources()` dumps those caches when you have a lifecycle moment of your own instead of waiting on a system memory warning.
+
+Reclaiming after every frame defeats the pool. Typical moments to call it are when a document closes, a renderer goes idle, or memory pressure makes current footprint matter and later allocations can wait.
+
+<Aside title="When a second context is warranted" tone="tip">
+  Most applications need one context per Metal device and working policy. A different library, pool, or pixel-format setup is a reason for another context. A second context is a bad way to dodge synchronized access to the first one.
+</Aside>

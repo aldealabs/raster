@@ -1,0 +1,46 @@
+---
+title: Performance & Debugging
+description: Learn how to find extra allocations, repeated graph work, forced sync, and wrong alpha or format before you start rewriting shaders.
+---
+
+When Raster is slow, graph shape and who is retaining what usually matter before the arithmetic inside one shader. Profiling the complete frame, then walking the framework-level causes, rules out repeated setup and data movement before a shader change.
+
+## Reuse
+
+`MTIContext` is expensive to create and cheap to reuse. Kernels belong in static storage, and shared graph prefixes can be built once. Recreating a custom Metal library or a Core Image context for each render adds CPU and allocation work without touching image math.
+
+## Output destinations
+
+`makeCGImage` is fine when the caller needs a Core Graphics image. In a preview, video, or encoding loop it is expensive, because the CPU-visible result forces synchronization and another allocation. Drawables, textures, and pixel buffers are the destinations that sustain that work.
+
+## Cache policy
+
+A persistent cache policy helps when one expensive result feeds separate renders. It hurts on per-frame intermediates, because those textures cannot return to the pool. `idleResourceCount` and `idleResourceSize` show what the pool is holding. Reclaiming belongs at lifecycle points.
+
+## Pixel formats
+
+An oversized intermediate format increases bandwidth and heap pressure across every pass. An undersized format clamps or quantizes values before later filters can recover them. Format choice is a bandwidth decision as well as a precision decision. `.rgba16Float` is the format that extended range or extra precision requires. Normalized formats remain appropriate for ordinary SDR stages that do not benefit from float storage.
+
+## Graph optimization
+
+`enablesRenderGraphOptimization` can combine compatible recipes and reduce intermediate passes. Representative renders with optimization on and off, including custom promises and HDR stages, are what show whether that is safe. If the output changes, the smallest differing recipe pair is the place to look before blaming the optimizer.
+
+## Quick Look and labels
+
+Quick Look on `MTIImage` renders a graph visualization in supported debugger environments. Meaningful labels on contexts and external command encoders make Metal captures name the subsystem instead of a wall of anonymous resources.
+
+## Symptoms
+
+| Symptom | First place to look |
+| --- | --- |
+| Memory grows with every frame | Persistent images, retained frame graphs, or buffers held outside their pool. |
+| First render is slow, later renders are stable | Expected shader/pipeline creation; warm the exact production path if latency matters. |
+| Every render has high CPU cost | Context/kernel recreation, image decode, or CPU-facing output conversion. |
+| Dark or bright fringes | Incorrect alpha type or repeated premultiplication. |
+| HDR values clip at 1 | Normalized output format, missing headroom, or an SDR-only custom formula. |
+| Simulator differs from device | Feature availability, Metal implementation limits, or different color/output paths. |
+| Downstream shader cannot find the header | Missing Metal header-search-path forwarding, not a Swift import problem. |
+
+<Aside title="Measure one stage at a time" tone="tip">
+  A frame that includes decode, filtering, readback, encoding, and presentation can hide which subsystem is stalling, so time the render task and the external bridges separately before changing shader code.
+</Aside>

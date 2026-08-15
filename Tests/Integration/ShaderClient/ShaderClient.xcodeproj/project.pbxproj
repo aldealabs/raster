@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		6C0000000000000000000001 /* ShaderClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C0000000000000000000011 /* ShaderClient.swift */; };
 		6C0000000000000000000002 /* Shaders.metal in Sources */ = {isa = PBXBuildFile; fileRef = 6C0000000000000000000012 /* Shaders.metal */; };
-		6C0000000000000000000003 /* MetalPetal in Frameworks */ = {isa = PBXBuildFile; productRef = 6C0000000000000000000021 /* MetalPetal */; };
+		6C0000000000000000000003 /* Raster in Frameworks */ = {isa = PBXBuildFile; productRef = 6C0000000000000000000021 /* Raster */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -23,7 +23,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6C0000000000000000000003 /* MetalPetal in Frameworks */,
+				6C0000000000000000000003 /* Raster in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -79,7 +79,7 @@
 			);
 			name = ShaderClient;
 			packageProductDependencies = (
-				6C0000000000000000000021 /* MetalPetal */,
+				6C0000000000000000000021 /* Raster */,
 			);
 			productName = ShaderClient;
 			productReference = 6C0000000000000000000013 /* ShaderClient */;
@@ -205,10 +205,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		6C0000000000000000000021 /* MetalPetal */ = {
+		6C0000000000000000000021 /* Raster */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6C0000000000000000000020 /* XCLocalSwiftPackageReference "../../.." */;
-			productName = MetalPetal;
+			productName = Raster;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

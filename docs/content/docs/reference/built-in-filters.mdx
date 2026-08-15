@@ -1,0 +1,74 @@
+---
+title: Built-in Filters
+description: The maintained filters Raster ships, grouped by job, plus the blend modes the registry includes.
+---
+
+Built-in filters are ordinary `MTIFilter` implementations backed by render, compute, MPS, or Core Image kernels. They share the lazy image model. Alpha types, output extent, pixel format, and device capabilities still vary by filter. Two built-in filters are not interchangeable just because they share the same protocol.
+
+## Color and tone
+
+These filters adjust color matrices, tone curves, transfer functions, lookup tables, and local contrast.
+
+- `MTIColorMatrixFilter` applies a 4×4 color matrix and bias.
+- `MTIVibranceFilter` adjusts saturation with skin-tone-aware behavior.
+- `MTIRGBToneCurveFilter` evaluates per-channel tone curves.
+- `MTIRGBColorSpaceConversionFilter` converts among supported RGB transfer functions.
+- Image conveniences cover saturation, exposure, brightness, contrast, and vibrance adjustments.
+- `MTIColorLookupFilter` applies supported 2D or 3D color lookup representations.
+- `MTICLAHEFilter` performs local contrast-limited adaptive histogram equalization and supports explicit HDR headroom.
+
+## Blur, detail, and convolution
+
+These filters cover Metal Performance Shaders blurs and edges, plus Raster's own detail and bokeh approximations.
+
+- `MTIMPSGaussianBlurFilter`, `MTIMPSBoxBlurFilter`, and `MTIMPSConvolutionFilter` use Metal Performance Shaders.
+- `MTIMPSUnsharpMaskFilter`, `MTIMPSDefinitionFilter`, and `MTIMPSSobelFilter` provide detail and edge operations.
+- `MTIHexagonalBokehBlurFilter` builds a multi-pass bokeh approximation.
+- `MTIHighPassSkinSmoothingFilter` combines high-pass detail separation with smoothing controls.
+
+MPS-backed filters require `context.isMetalPerformanceShadersSupported`. Their exact numerical results can vary slightly across GPU families and SDK implementations. Tests that do not treat bit identity as part of the API should use tolerances.
+
+## Geometry and shape
+
+These filters change viewport, crop, corners, distortion, and stylized sampling.
+
+- `MTITransformFilter` applies 2D/3D transforms and controls the output viewport.
+- `MTICropFilter` selects pixel or normalized regions.
+- `MTIRoundCornerFilter` clips to circular or continuous corners.
+- `MTIBulgeDistortionFilter` applies radial distortion.
+- `MTIPixellateFilter`, `MTIColorHalftoneFilter`, and `MTIDotScreenFilter` create stylized sampling patterns.
+
+## Alpha and composition
+
+These filters convert alpha representation and combine images through blends, masks, chroma keys, and layer stacks.
+
+- `MTIPremultiplyAlphaFilter` and `MTIUnpremultiplyAlphaFilter` convert alpha representation.
+- `MTIBlendFilter` combines one source with one background across the registered blend-mode set.
+- `MTIBlendWithMaskFilter` controls a blend through a mask.
+- `MTIChromaKeyBlendFilter` removes a keyed color and composites a background.
+- `MTIMultilayerCompositingFilter` and its Swift `MultilayerCompositingFilter` surface compose ordered layers with transforms, masks, tint, corners, and blend modes.
+
+## Histogram and analysis
+
+These filters produce or consume histogram data.
+
+- `MTIMPSHistogramFilter` produces histogram data through MPS.
+- `MTICLAHEFilter` builds local histograms internally and applies their lookup tables to the image.
+
+## Core Image coverage
+
+`MTICoreImageUnaryFilter` is a bridge that makes the broader CIFilter catalogue available inside a Raster graph. Each Core Image filter still brings its own alpha, extent, and optimization behavior. Generators and infinite-extent filters need a finite output size. Adjacent Core Image work can stay in Core Image until the result returns to Raster.
+
+## Blend modes
+
+The built-in registry contains:
+
+- normal
+- darken, multiply, color burn, linear burn, and darker color
+- lighten, screen, color dodge, add, and lighter color
+- overlay, soft light, hard light, vivid light, linear light, pin light, and hard mix
+- difference, exclusion, subtract, and divide
+- hue, saturation, color, and luminosity
+- the 512×512 color-lookup mode
+
+Custom modes can be registered with `MTIBlendFunctionDescriptors`. Their blend function is the two-argument `float4 blend(float4 backdrop, float4 source)`.

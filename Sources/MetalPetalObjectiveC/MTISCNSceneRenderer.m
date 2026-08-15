@@ -1,1 +1,0 @@
-../../Frameworks/MetalPetal/SceneKit/MTISCNSceneRenderer.m

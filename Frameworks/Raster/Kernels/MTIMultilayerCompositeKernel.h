@@ -1,0 +1,47 @@
+//
+//  MTIMultilayerRenderPipelineKernel.h
+//  Raster
+//
+//  Created by YuAo on 27/09/2017.
+//
+
+#import <Metal/Metal.h>
+#if __has_include(<Raster/Raster.h>)
+#import <Raster/MTIKernel.h>
+#import <Raster/MTITextureDimensions.h>
+#import <Raster/MTIAlphaType.h>
+#else
+#import "MTIKernel.h"
+#import "MTITextureDimensions.h"
+#import "MTIAlphaType.h"
+#endif
+
+NS_ASSUME_NONNULL_BEGIN
+
+@class MTIRenderPipeline, MTIFunctionDescriptor, MTIContext, MTIImage, MTILayer;
+
+__attribute__((objc_subclassing_restricted))
+@interface MTIMultilayerCompositeKernel : NSObject <MTIKernel>
+
+- (MTIImage *)applyToBackgroundImage:(MTIImage *)image
+                              layers:(NSArray<MTILayer *> *)layers
+                   rasterSampleCount:(NSUInteger)rasterSampleCount
+                     outputAlphaType:(MTIAlphaType)outputAlphaType
+             outputTextureDimensions:(MTITextureDimensions)outputTextureDimensions
+                   outputPixelFormat:(MTLPixelFormat)outputPixelFormat;
+
+- (MTIImage *)applyToBackgroundImage:(MTIImage *)image
+                              layers:(NSArray<MTILayer *> *)layers
+                   rasterSampleCount:(NSUInteger)rasterSampleCount
+                            headroom:(float)headroom
+                     outputAlphaType:(MTIAlphaType)outputAlphaType
+             outputTextureDimensions:(MTITextureDimensions)outputTextureDimensions
+                   outputPixelFormat:(MTLPixelFormat)outputPixelFormat;
+
+@end
+
+@class MTIRenderGraphNode;
+
+FOUNDATION_EXPORT void MTIMultilayerCompositingRenderGraphNodeOptimize(MTIRenderGraphNode *node);
+
+NS_ASSUME_NONNULL_END

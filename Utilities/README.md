@@ -1,3 +1,3 @@
 # Utilities
 
-Code Generators for MetalPetal.
+Code generators for Raster.

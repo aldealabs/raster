@@ -1,0 +1,96 @@
+---
+title: Installation
+description: Learn how to add Raster with Swift Package Manager and import it from Swift, Objective-C, or Metal.
+---
+
+Raster is distributed through Swift Package Manager. A package dependency gives Swift and Objective-C clients the framework module. If an Xcode target compiles its own `.metal` files, those shaders also need Xcode's header search paths forwarded so they can include Raster's headers.
+
+## Requirements
+
+Raster supports iOS, macOS, tvOS, and Mac Catalyst. The floors for a given 2.x release live in Raster's own `Package.swift`. Your application can require newer OS versions than that.
+
+Raster 2.x uses semantic versions. Production apps usually pin a compatible range rather than following a branch.
+
+## Xcode
+
+Open **File → Add Package Dependencies**, enter the repository URL, and select the `Raster` product for the targets that use it:
+
+```text
+https://github.com/aldealabs/raster.git
+```
+
+## Swift Package Manager
+
+```swift
+// swift-tools-version: 5.9
+import PackageDescription
+
+let package = Package(
+    name: "ImagePipeline",
+    platforms: [
+        .macOS(.v13),
+        .iOS(.v16),
+    ],
+    dependencies: [
+        .package(
+            url: "https://github.com/aldealabs/raster.git",
+            from: "2.0.0"
+        ),
+    ],
+    targets: [
+        .target(
+            name: "ImagePipeline",
+            dependencies: [
+                .product(name: "Raster", package: "raster"),
+            ]
+        ),
+    ]
+)
+```
+
+## Imports
+
+<Tabs defaultValue="swift" syncKey="language">
+  <TabsList>
+    <TabsTrigger value="swift">Swift</TabsTrigger>
+    <TabsTrigger value="objective-c">Objective-C</TabsTrigger>
+    <TabsTrigger value="metal">Metal</TabsTrigger>
+  </TabsList>
+  <TabsContent value="swift">
+
+```swift
+import Raster
+```
+
+  </TabsContent>
+  <TabsContent value="objective-c">
+
+```objective-c
+#import <Raster/Raster.h>
+```
+
+  </TabsContent>
+  <TabsContent value="metal">
+
+```metal
+#include <Raster/MTIShaderLib.h>
+```
+
+  </TabsContent>
+</Tabs>
+
+If an Xcode target compiles its own Metal source, give the Metal compiler the headers SwiftPM already resolved:
+
+```text
+MTL_HEADER_SEARCH_PATHS = "$(HEADER_SEARCH_PATHS)"
+```
+
+That setting forwards paths Xcode already has. It does not hard-code a checkout or DerivedData folder.
+
+## Metal headers
+
+A Swift `import Raster` can succeed while a Metal `#include <Raster/MTIShaderLib.h>` still fails, because those files go through different compilers. If your application owns custom shaders, a small shader target or integration test that includes `MTIShaderLib.h` and creates an `MTIContext` is the reliable check. Raster's own fixtures cover Swift, Objective-C, Metal source, and the example application separately for the same reason.
+
+<Aside title="Moving from MetalPetal?" tone="tip">
+  A target should not mix a `Raster` import with the old `MetalPetal` product. The [migration guide](/docs/start/migrating-from-metalpetal) covers changing the dependency, module import, Objective-C umbrella header, and Metal include together.
+</Aside>

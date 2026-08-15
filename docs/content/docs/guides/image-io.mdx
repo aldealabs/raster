@@ -1,0 +1,86 @@
+---
+title: Image Input & Output
+description: Learn how to load images with the alpha type and color space you actually have, then render into whatever the next step already uses.
+---
+
+Raster can construct an `MTIImage` from a file, a `CGImage`, a texture, or a pixel buffer. Color matching, orientation, and alpha type are decided at that moment. The output call writes into whatever the next system already has.
+
+## Files and CGImage
+
+URL and `CGImage` initializers honor orientation and loading options. The `MTICGImageLoadingOptions` forms cover extra image formats and make color matching explicit, which the older `MTKTextureLoader.Option` overloads do not.
+
+```swift
+let loading = MTICGImageLoadingOptions(
+    colorSpace: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)
+)
+
+guard let image = MTIImage(
+    contentsOf: url,
+    options: loading,
+    isOpaque: url.pathExtension.lowercased() == "jpg"
+) else {
+    throw PipelineError.imageUnavailable
+}
+```
+
+You can pass a `nil` color space in the loading options to disable color matching. That is the path when the source values already sit in the color encoding your graph expects.
+
+## Textures and pixel buffers
+
+Texture and pixel-buffer initializers skip a CPU copy. The alpha type is an argument you supply, and the color policy has to stay consistent, because a raw texture has no tagged color or alpha story the way a `CGImage` does.
+
+```swift
+let textureImage = MTIImage(
+    texture: texture,
+    alphaType: .nonPremultiplied
+)
+
+let cameraImage = MTIImage(
+    cvPixelBuffer: pixelBuffer,
+    alphaType: .alphaIsOne
+)
+```
+
+Pixel-buffer promises stay persistent because Core Video keeps reusable storage whose identity has to survive resolution. The producer's lifetime and how the pool recycles buffers both matter here. An `MTIImage` keeps that buffer alive. The producer can still write the next frame into the same buffer while you still need the pixels from the old one.
+
+## Core Image sources
+
+When the source is already a `CIImage`, Raster can wrap it and render the Core Image result when needed.
+
+```swift
+let image = MTIImage(
+    ciImage: ciImage,
+    isOpaque: false,
+    options: .default
+)
+```
+
+A `CIImage` with infinite or translated extent needs finite bounds that match the viewport you want to process.
+
+## Destinations
+
+Raster can write into a destination the next system already owns.
+
+```swift
+try context.render(output, to: destinationPixelBuffer)
+```
+
+```swift
+let task = try context.startTask(
+    toRender: output,
+    to: destinationTexture,
+    destinationAlphaType: .premultiplied
+) { completedTask in
+    // Continue after the command buffer finishes.
+}
+```
+
+`makeCGImage` is available when a Core Graphics consumer or encoder genuinely needs a `CGImage`. In a video or display loop, you can render to a buffer, texture, or drawable instead, and skip the GPU-to-CPU round trip and the extra allocation.
+
+## Orientation and scale
+
+`UIImage` and file-backed inputs can carry orientation independently of their underlying pixel memory. Raster folds that into the image recipe. Once the graph is working on pixels, UIKit scale and EXIF orientation are gone as separate metadata. Any orientation or scale the file or UI still needs has to be attached on the way out.
+
+<Aside title="Dimensions are known before pixels" tone="note">
+  Promise dimensions drive texture allocation. Zero-sized images should be rejected early. Core Image operations with an infinite natural extent need an explicit finite viewport so Raster knows what to allocate.
+</Aside>

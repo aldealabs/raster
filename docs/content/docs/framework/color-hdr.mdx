@@ -1,0 +1,56 @@
+---
+title: Color & HDR
+description: Learn how Raster tags color at the edges of the graph, how pixel format affects range, and how headroom handles values above 1.
+---
+
+Metal textures store component values and a pixel format. They do not carry a color space. Raster does most color matching at image input and output, and filters run on the numbers already sitting in the graph without converting them. HDR is a separate question: how far valid color components may go above 1.
+
+## Color, alpha, format, and headroom
+
+At every boundary you should know the primaries and transfer function that give the values meaning, whether those values are straight or premultiplied, whether the texture format can hold the precision and range you need, and what maximum component value a nonlinear operation should treat as the top of its range. Changing `.bgra8Unorm` to `.rgba16Float` answers only the format question and stops the texture from clamping values above 1. An SDR blend mode still will not understand HDR.
+
+## Color at input
+
+`MTICGImageLoadingOptions` can transform a `CGImage` or URL-backed image into a requested RGB color space as the texture is created:
+
+```swift
+let options = MTICGImageLoadingOptions(
+    colorSpace: CGColorSpace(name: CGColorSpace.extendedLinearSRGB)
+)
+
+let image = MTIImage(
+    cgImage: source,
+    options: options,
+    isOpaque: true
+)
+```
+
+Core Image input has its own `MTICIImageRenderingOptions`. Metal textures and directly bridged pixel buffers require you to know what their values mean, because Raster cannot recover missing color metadata from the texture.
+
+## Color at output
+
+The color-space argument on `makeCGImage` describes the returned Core Graphics image. It tags the result. A graph that already processed values in the wrong encoding still needs `MTIRGBColorSpaceConversionFilter` or the shader-library conversion functions to move between sRGB-like and linear encodings.
+
+## HDR headroom
+
+Raster's blend, multilayer compositing, and CLAHE filters expose `headroom`. Default `headroom` is `1`. That keeps the historical SDR formulas and every existing call site. A larger value is appropriate when the input and output textures contain meaningful extended-range values:
+
+```swift
+let blend = MTIBlendFilter(blendMode: .screen)
+blend.inputBackgroundImage = background
+blend.inputImage = foreground
+blend.headroom = 4
+blend.outputPixelFormat = .rgba16Float
+```
+
+The built-in blend formulas normalize their bounded operations to the declared headroom and scale back afterward. Custom blend formulas stay two-argument. Raster does not silently add a third parameter to shader source you wrote.
+
+`MTICLAHEFilter` keeps its unspecified SDR output format at `headroom == 1`. HDR use selects a float-capable output when you leave the format unspecified, because an 8-bit normalized target would destroy the extended result.
+
+<Aside title="Headroom is part of recipe identity" tone="note">
+  A render graph optimizer may combine compatible recipes, but it has to keep a boundary when their headroom differs. The same shader name and images are different recipes once headroom changes.
+</Aside>
+
+## Testing HDR
+
+An HDR test should include values below 1, values above 1, translucent pixels, and a reference for the intended formula. One component above 1 only proves the texture survived; it does not prove hue is correct. Alpha and nonlinear blend behavior need that same reference.

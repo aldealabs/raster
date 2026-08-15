@@ -1,0 +1,47 @@
+---
+title: Images & Promises
+description: Learn how an MTIImage describes pixels as an immutable recipe that Raster evaluates when you render.
+---
+
+An `MTIImage` is an immutable recipe that says how to get pixels. Those pixels might not exist yet. The object holds an `MTIImagePromise` plus pixel dimensions, alpha semantics, sampling behavior, and a cache policy, which is enough for an `MTIContext` to evaluate the image later.
+
+A filter can hand you an image immediately because that image is a recipe. Two branches share an upstream image by pointing at the same dependency, so nobody copies a bitmap.
+
+## Promises
+
+Every `MTIImagePromise` tells the renderer four things. `dimensions` is the texture shape, known before resolution even starts, and `dependencies` lists the input images that have to resolve first. `alphaType` is how RGB relates to opacity. It travels with the graph. `resolve(with:)` encodes or runs the work that produces a render target.
+
+Promises also implement `promiseByUpdatingDependencies(_:)`. The render graph optimizer calls that to rebuild a recipe with optimized inputs, and the original graph stays untouched. Built-in promises cover URLs, `CGImage`, `CIImage`, `CVPixelBuffer`, Metal textures, bitmap data, named assets, solid colors, Model I/O textures, and kernel output. A custom promise is appropriate when the work does not fit a render or compute kernel. In that case you are responsible for listing the correct dependencies and for how long the texture lives.
+
+## Immutability
+
+Changing an image's cache policy or sampler descriptor returns another `MTIImage`:
+
+```swift
+let sampled = image.withSamplerDescriptor(.default)
+let reusable = sampled.withCachePolicy(.persistent)
+```
+
+The exact imported spelling comes from the Objective-C-to-Swift interface. An image is still immutable. You can wire the same source image into several filters, and graph construction stays predictable.
+
+## Resolution
+
+```text
+CGImage promise ──▶ saturation promise ──▶ blend promise ──▶ render destination
+                         ▲                     ▲
+                         └──── exposure promise┘
+```
+
+Nothing in this graph needs a command buffer until a context renders the final image. During resolution Raster walks the dependencies, checks the dependency map, grabs temporary or persistent render targets, and asks each promise to encode its work. When a transient result has no remaining consumers, its texture can go back to the pool.
+
+<Aside title="A transient image can lose its texture" tone="warning">
+  You can render a transient image again and again. Raster still may have given the previous texture back. If another system needs the same texture object to stay put, you can render into a texture or pixel buffer that system holds, or use a persistent image policy and decide how long that texture should live.
+</Aside>
+
+## Custom promises
+
+An existing kernel is usually enough. `MTIRenderPipelineKernel`, `MTIComputePipelineKernel`, `MTIMPSKernel`, or the Core Image integration already describe most operations. `MTIImagePromise` is the extension point when you need custom encoders, several MPS calls, textures produced outside Raster, or some other execution model that needs the image rendering context directly.
+
+A custom promise has to know its dimensions and alpha type before rendering starts, and `dependencies` has to list every image whose texture it reads. A copied promise must update those dependencies. Its other parameters stay the same. Resolution returns a render target whose lifetime follows Raster's rules for who holds the texture.
+
+For how resolution runs, continue with [Promise Resolution](/docs/internals/promise-resolution).

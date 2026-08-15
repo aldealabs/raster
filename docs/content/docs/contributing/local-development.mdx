@@ -1,0 +1,64 @@
+---
+title: Local Development
+description: Learn how a Raster checkout is set up, how the local feedback loops relate, and what a review-ready change includes.
+---
+
+A Raster checkout is a Swift package, a documentation app, and the example projects. The first useful command is the one that exercises the file you changed. After it passes, the next checks are `swift test` and the package or consumer gates that read the same file.
+
+## Toolchain
+
+When you are matching CI, the Xcode version is the one the current workflow pins, and command-line tools point at that developer directory. The repository does not require CocoaPods.
+
+```bash
+xcodebuild -version
+swift --version
+swift package resolve
+```
+
+A normal package build is the pair below.
+
+```bash
+swift build
+swift test
+```
+
+A focused behavior test is usually enough to tell you the framework code is wrong. Deleting generated source or changing package wiring is rarely the first useful step.
+
+## Feedback loops
+
+The first useful command depends on what changed.
+
+| Change | First useful command |
+| --- | --- |
+| Swift or Objective-C behavior | `swift test --filter <TestClass>/<testName>` |
+| Rendering or platform behavior | Focused `xcodebuild test` on the relevant simulator or macOS destination. |
+| Shader interface or generated blend code | Run all generators, then the focused render test. |
+| SwiftPM public boundary | `bash Scripts/test-integration.sh` |
+| Example application | Build the affected `RasterExamples` scheme. |
+| Documentation | `cd docs && npm run check` |
+
+The root `bash test.sh` is the local platform matrix. It is the next step after the focused command already passed. It runs generators twice, the bounded optimizer regression, SwiftPM tests, simulator and Catalyst tests when available, and unsigned generic device builds.
+
+## Canonical and generated files
+
+Canonical edits live in `Frameworks/Raster`. Files under `Sources/` are generated package projections. If a generated file is wrong, the durable fix is its canonical input or generator, the complete generation sequence, and an idempotence check.
+
+## Clean checkouts
+
+Build and test scripts snapshot repository status and fail if a generator or integration build leaves tracked or untracked changes. New tooling is most useful when it keeps that property, because a gate that repairs the checkout as a side effect makes the next run green for the wrong reason.
+
+## Documentation
+
+The documentation site is a standalone Next.js app. It reads MDX from `docs/content/docs` at build time.
+
+```bash
+cd docs
+npm ci
+npm run dev
+```
+
+A new page needs an entry in the explicit navigation registry, complete frontmatter, and a validation pass before the development server's route is a reliable check.
+
+## Review
+
+A change is easier to review when the focused tests that demonstrated it, `swift test`, generator drift checks when they apply, and the integration consumers for package changes have already run, along with `git diff --check`. If a platform gate could not run on your machine, you can say so in the review.

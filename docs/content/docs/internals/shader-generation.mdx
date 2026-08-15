@@ -1,0 +1,46 @@
+---
+title: Shader Generation
+description: Learn how Frameworks/Raster/Shaders, the blend wrappers, SwiftPM header links, and MTISwiftPMBuiltinLibrarySupport.mm stay in lockstep.
+---
+
+Raster checks generated shader and package files into the repository because several build systems consume the same shader interfaces in different ways. Canonical sources live in `Frameworks/Raster/Shaders`. Generators write the repetitive blend code, host encoders, umbrella headers, SwiftPM symlinks, and the embedded source library that SwiftPM builds compile.
+
+## Generator sequence
+
+1. **Boilerplate generator** writes blend shaders, multilayer blend shaders, custom blend wrappers, `MTIVector` SIMD helpers, and the Swift SIMD argument encoder.
+2. **Umbrella-header generator** discovers public headers and rewrites the framework umbrella header while excluding private implementation headers.
+3. **Swift package generator** recreates `Sources/`, links canonical Swift/Objective-C files into target-shaped directories, writes the module map, creates both flat and namespaced public header links, and embeds the built-in Metal source.
+
+The deterministic commands are:
+
+```bash
+swift run --package-path Utilities main boilerplate-generator "$PWD"
+swift run --package-path Utilities main umbrella-header-generator "$PWD"
+swift run --package-path Utilities main swift-package-generator "$PWD"
+```
+
+`utilities.sh` is the interactive wrapper for local use, while CI and release scripts call the deterministic commands.
+
+## The embedded library
+
+The package still has a historical source-embedding path for the built-in Metal library. The Swift package generator concatenates `MTIShaderLib.h`, function constants, and every sorted `.metal` source file, strips local include directives, and writes the concatenated result into `MTISwiftPMBuiltinLibrarySupport.mm`. At runtime the context registers that source and compiles a device library with fast math enabled. A shader change can pass a framework project build and still fail for a SwiftPM consumer, because the checked-in embedded source may still be yesterday's file.
+
+## Custom blend arity
+
+Built-in wrappers call headroom-aware overloads. Custom formula wrappers keep calling the consumer's two-argument `blend(backdrop, source)` function. The generator makes that split. Hand-editing the generated `.metal` output repairs one checkout and loses the fix on the next pass.
+
+## Idempotence
+
+When checked-in outputs are already current, a clean generator pass produces no diff, and a second complete pass is byte-identical to the first, including symlink destinations and generated source. The release gate checks tracked changes and untracked outputs, because `git diff` alone cannot see a newly generated missing file.
+
+## Source
+
+```text
+Frameworks/Raster/Shaders/MTIShaderLib.h                   Canonical shader interface
+Frameworks/Raster/Shaders/*.metal                         Canonical shader implementations
+Utilities/Sources/BoilerplateGenerator/                       Repetitive shader and encoder output
+Utilities/Sources/UmbrellaHeaderGenerator/                    Public header aggregation
+Utilities/Sources/SwiftPackageGenerator/                      Package layout and embedded library
+Sources/RasterObjectiveC/MTISwiftPMBuiltinLibrarySupport.mm Generated SwiftPM source blob
+test.sh                                                       Two-pass drift gate
+```

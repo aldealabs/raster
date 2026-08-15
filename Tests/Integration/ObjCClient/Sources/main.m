@@ -1,5 +1,5 @@
 #import <Metal/Metal.h>
-#import <MetalPetal/MetalPetal.h>
+#import <Raster/Raster.h>
 
 int main(void) {
     id<MTLDevice> device = MTLCreateSystemDefaultDevice();

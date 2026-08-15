@@ -5,8 +5,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -- "$script_dir/.." && pwd -P)"
 cd "$repo_root"
 
-readonly expected_branch="release/metalpetal-1.26"
-readonly evidence_file="$repo_root/.release-evidence/1.26.0-local.md"
+readonly evidence_file="$repo_root/.release-evidence/raster-local.md"
 
 assert_clean() {
   local status_output
@@ -67,7 +66,7 @@ scan_required_reason_apis() {
   local scan_status
   pattern='\b(NSUserDefaults|UserDefaults|standardUserDefaults|NSFileCreationDate|NSFileModificationDate|fileCreationDate|fileModificationDate|creationDate(Key)?|modificationDate|contentModificationDate(Key)?|attributeModificationDate(Key)?|NSURLCreationDateKey|NSURLContentModificationDateKey|getattrlist|getattrlistbulk|fgetattrlist|getattrlistat|stat|fstat|fstatat|lstat|volumeAvailableCapacity|volumeAvailableCapacityKey|volumeAvailableCapacityForImportantUsage|volumeAvailableCapacityForImportantUsageKey|volumeAvailableCapacityForOpportunisticUsage|volumeAvailableCapacityForOpportunisticUsageKey|volumeTotalCapacity|volumeTotalCapacityKey|NSURLVolumeAvailableCapacityKey|NSURLVolumeAvailableCapacityForImportantUsageKey|NSURLVolumeAvailableCapacityForOpportunisticUsageKey|NSURLVolumeTotalCapacityKey|systemFreeSize|systemSize|NSFileSystemFreeSize|NSFileSystemSize|f_bfree|f_bavail|statfs|fstatfs|statvfs|fstatvfs|systemUptime|mach_absolute_time|activeInputModes)\b'
   set +e
-  matches="$(rg -n -i --glob '*.{h,m,mm,swift,c,cc,cpp}' -e "$pattern" Frameworks/MetalPetal Sources/MetalPetal Sources/MetalPetalObjectiveC 2>&1)"
+  matches="$(rg -n -i --glob '*.{h,m,mm,swift,c,cc,cpp}' -e "$pattern" Frameworks/Raster Sources/Raster Sources/RasterObjectiveC 2>&1)"
   scan_status=$?
   set -e
   case "$scan_status" in
@@ -76,7 +75,7 @@ scan_required_reason_apis() {
       return 1
       ;;
     1)
-      printf 'No required-reason API candidates matched in Frameworks/MetalPetal, Sources/MetalPetal, or Sources/MetalPetalObjectiveC. This is a limited source scan, not a universal privacy-compliance claim.\n'
+      printf 'No required-reason API candidates matched in Frameworks/Raster, Sources/Raster, or Sources/RasterObjectiveC. This is a limited source scan, not a universal privacy-compliance claim.\n'
       ;;
     *)
       printf 'Required-reason API scan failed with status %s:\n%s\n' "$scan_status" "$matches" >&2
@@ -86,10 +85,6 @@ scan_required_reason_apis() {
 }
 
 branch="$(git branch --show-current)"
-if [[ "$branch" != "$expected_branch" ]]; then
-  printf 'Release verification requires branch %s; current branch is %s.\n' "$expected_branch" "${branch:-DETACHED}" >&2
-  exit 1
-fi
 
 assert_clean
 git diff --check
@@ -103,7 +98,7 @@ metal_path="$(xcrun --find metal)" || {
 }
 
 {
-  printf '# MetalPetal 1.26.0 local release evidence\n\n'
+  printf '# Raster local release evidence\n\n'
   printf -- '- UTC start: `%s`\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   printf -- '- Commit: `%s`\n' "$(git rev-parse HEAD)"
   printf -- '- Branch: `%s`\n' "$branch"
@@ -118,12 +113,9 @@ cat >> "$evidence_file" <<'EVIDENCE'
 
 ## Known macOS example boundary
 
-The converted macOS example remains in-tree but is not a release gate because its pinned VideoIO 2.0.3 dependency fails under Xcode 26 at `Camera.swift:383-384`, where it declares a stored property unavailable on macOS. The iOS example plus all three clean downstream consumers remain gates.
-
-## Release notes
+The macOS example remains in-tree but is not a release gate because its pinned VideoIO 2.0.3 dependency fails under Xcode 26 at `Camera.swift:383-384`, where it declares a stored property unavailable on macOS. The iOS example plus all three clean downstream consumers remain gates.
 
 EVIDENCE
-cat RELEASE_NOTES_1.26.0.md >> "$evidence_file"
 
 run_generators
 run git diff --check

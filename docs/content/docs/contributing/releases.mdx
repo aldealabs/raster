@@ -1,0 +1,35 @@
+---
+title: Releases
+description: Learn how Raster cuts SwiftPM releases from verified commits, with CHANGELOG.md as the source of truth.
+---
+
+Raster releases are Git tags that Swift Package Manager consumes directly. The tagged commit is both the source and the package-layout artifact. It contains every generated file, compiles its built-in Metal library from a clean consumer, and leaves no required setup outside the repository.
+
+## Version policy
+
+MetalPetal 1.26.x is frozen compatibility maintenance. Raster begins at 2.0.0 because the package, product, and module identity change even though `MTI*` type names remain. From that point Raster follows semantic versioning. Source-breaking public changes require a new major version. Additive features and compatible fixes belong in minor and patch releases.
+
+## Changelog
+
+`CHANGELOG.md` is the source of truth for a release. It is updated with issue or pull-request references where they explain provenance. The GitHub Release body is derived from that version's changelog section. You can add installation or migration context that is appropriate for the audience.
+
+The committed `RELEASE_NOTES_1.26.0.md` is a capstone artifact for the MetalPetal handoff. Raster does not need one committed release-notes file per version, because duplicating the changelog and GitHub Release creates three texts that drift. A dedicated migration document is useful only when the guidance has a lifetime beyond one release announcement.
+
+## Verification
+
+A release verifier refuses a dirty tree, records the exact commit and toolchain, runs generators twice, builds and tests SwiftPM, executes the platform matrix and consumer fixtures, scans package boundaries, and finishes with a clean-tree assertion. Evidence belongs outside tracked product source or in the release's attached artifacts.
+
+## Publishing
+
+1. Merge or otherwise select the exact verified commit.
+2. Run hosted CI on that commit, including strict simulator and generic device jobs.
+3. Create an annotated semantic-version tag at the same commit.
+4. Push the tag and confirm GitHub resolves it to the intended object.
+5. Publish the GitHub Release using the reviewed changelog material.
+6. Resolve the package from a fresh consumer using the tag.
+
+Moving a tag after publishing a release makes the release page retain its original publication time while serving different source, which breaks provenance. If a published tag is wrong, a new patch version is the usual fix unless the release never escaped a controlled private test.
+
+## Distribution
+
+Raster is SwiftPM-only. CocoaPods manifests and automation are not restored as part of a release fix.

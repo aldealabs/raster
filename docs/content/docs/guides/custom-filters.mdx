@@ -1,0 +1,91 @@
+---
+title: Custom Filters
+description: Learn how to turn a Metal function into a reusable Raster filter without writing your own command scheduling or texture lifetime code.
+---
+
+A custom filter is usually three pieces: Metal source in the consumer target, a reusable kernel that names the shader functions, and a small mutable filter object that captures inputs and parameters into an output image.
+
+## Fragment functions
+
+A custom filter starts with a Metal fragment function in the consumer target.
+
+```metal
+#include <metal_stdlib>
+#include <Raster/MTIShaderLib.h>
+
+using namespace metal;
+using namespace metalpetal;
+
+fragment float4 vignette(
+    VertexOut vertexIn [[stage_in]],
+    texture2d<float, access::sample> sourceTexture [[texture(0)]],
+    sampler sourceSampler [[sampler(0)]],
+    constant float &amount [[buffer(0)]])
+{
+    float2 uv = vertexIn.textureCoordinate;
+    float2 centered = uv - 0.5;
+    float falloff = smoothstep(0.72, 0.18, length(centered));
+    float4 color = sourceTexture.sample(sourceSampler, uv);
+    color.rgb *= mix(1.0, falloff, amount);
+    return color;
+}
+```
+
+The lowercase `metalpetal` shader namespace stays for source compatibility with existing custom shaders, even though Raster changed the package, module, and header namespace. The old shader symbol names remain the ones custom shaders use.
+
+An Xcode target that compiles this file needs `MTL_HEADER_SEARCH_PATHS = "$(HEADER_SEARCH_PATHS)"` so the Metal compiler receives Raster's SwiftPM include path.
+
+<Aside title="Core Image kernels need a separate build path" tone="note">
+  A target that also compiles Metal-backed `CIKernel` source must not compile every `.metal` file with the same flags, so use the [Core Image Metal kernels guide](/docs/guides/core-image-metal-kernels) to keep `*.ci.metal` functions out of Raster's normal `default.metallib` pipeline.
+</Aside>
+
+## Shared kernels
+
+A kernel is the reusable program description. Every filter instance that needs the same shader can share one.
+
+```swift
+private enum VignetteKernel {
+    static let value = MTIRenderPipelineKernel(
+        vertexFunctionDescriptor: .passthroughVertex,
+        fragmentFunctionDescriptor: MTIFunctionDescriptor(
+            name: "vignette",
+            in: Bundle.module
+        )
+    )
+}
+```
+
+The function descriptor names the bundle that contains the compiled `.metallib`. `Bundle.main` works in a simple application. It fails quietly once the shader lives in a package, framework, extension, or test bundle instead of the application you thought you were in.
+
+## Filter parameters
+
+The mutable filter object holds inputs and parameters, then asks the shared kernel for an output image. Reading `outputImage` creates another image recipe. It does not submit commands to the GPU.
+
+```swift
+final class VignetteFilter: MTIUnaryFilter {
+    var inputImage: MTIImage?
+    var amount: Float = 0.5
+    var outputPixelFormat: MTLPixelFormat = .unspecified
+
+    var outputImage: MTIImage? {
+        guard let inputImage else { return nil }
+        return VignetteKernel.value.apply(
+            to: inputImage,
+            parameters: ["amount": amount],
+            outputPixelFormat: outputPixelFormat
+        )
+    }
+}
+```
+
+The parameter dictionary is encoded by matching keys to Metal argument names. A scalar `Float` maps to `float`. Fixed-width Swift integer types map predictably to Metal integer widths. SIMD values can be passed directly. Structured or pointer-like constant data uses `Data` or `MTIDataBuffer`.
+
+## Kernels and promises
+
+A render pipeline covers fragment work, blending, custom geometry, multiple render targets, or several draw calls in one pass. A compute pipeline is the family for thread-grid algorithms and random-access output. `MTIMPSKernel` is the wrapper when Metal Performance Shaders already provides the primitive. `MTIImagePromise` is only needed when one recipe has to coordinate operations that no kernel family expresses.
+
+Most filters stop at a kernel. Each step down gives you more control, and more work you now have to get right, because a custom promise has to handle dependencies, render-target lifetime, and dependency rewriting. A render kernel lets Raster keep doing that.
+
+## Testing custom shaders
+
+A small render test that compiles the consumer library, passes every argument type, renders known pixels, and runs outside the Raster source target will catch library-bundle mistakes and Metal-header integration that normal Swift tests never see.

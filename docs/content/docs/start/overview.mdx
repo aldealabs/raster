@@ -1,0 +1,52 @@
+---
+title: Introduction
+description: Learn how Raster turns image recipes into Metal work, and how it continues MetalPetal.
+---
+
+Raster is a Metal image processing framework. You describe an image as a source plus a chain of operations, then hand the final `MTIImage` to an `MTIContext` when you need pixels. Construction stays separate from evaluation, so Raster can reuse pipeline state, skip unused intermediates, and combine compatible render passes before anything reaches the GPU.
+
+Raster is the maintained continuation of [MetalPetal](/docs/start/migrating-from-metalpetal). Version 2.0 ships as the `Raster` package product and module. The public types are still `MTIImage`, `MTIContext`, `MTIFilter`, and the rest of the `MTI*` names, because those names already describe the API and are widely used in existing apps.
+
+## How Raster works
+
+A typical pipeline has four pieces:
+
+1. A **source** creates an immutable `MTIImage` from a `CGImage`, URL, Metal texture, pixel buffer, Core Image image, or another supported input.
+2. A **filter** holds parameters and asks a kernel for another `MTIImage`. This step does not talk to the GPU.
+3. The resulting **render graph** records how each image depends on the images before it.
+4. An **`MTIContext`** walks that graph and renders the result to a `CGImage`, `CIImage`, `CVPixelBuffer`, Metal texture, or drawable.
+
+```swift
+import Metal
+import Raster
+
+let device = MTLCreateSystemDefaultDevice()!
+let context = try MTIContext(device: device)
+
+let input = MTIImage(cgImage: cgImage, isOpaque: true)
+let output = input
+    .adjusting(saturation: 0.82)
+    .adjusting(exposure: 0.35)
+
+let rendered = try context.makeCGImage(from: output)
+```
+
+The chained helpers still create ordinary filters and promises. They only make the call site shorter. Raster does not switch into an eager bitmap-in, bitmap-out mode.
+
+## Images, filters, and contexts
+
+`MTIImage` values are immutable, so they are safe to pass between threads. Filters are mutable builders. Configure one on a single queue or actor, then pass the output image onward instead of sharing the filter itself. `MTIContext` is thread-safe and expensive to create. Most apps keep one context per Metal device, or per rendering policy, and reuse it.
+
+Raster handles scheduling, texture reuse, pipeline caches, and argument encoding. It does not infer whether your numbers are linear, gamma-encoded, premultiplied, or allowed above 1. Those details stay explicit because a wrong guess looks fine until a different input or output path shows the mismatch.
+
+<Aside title="Recipes are not bitmaps" tone="note">
+  Filters do not change their inputs, and an `MTIImage` does not mean a texture already exists. If you need the same pixels later, use a persistent cache policy or render into storage you own.
+</Aside>
+
+## Next steps
+
+- [Installation](/docs/start/installation) covers Swift Package Manager and Metal header search paths.
+- [First Pipeline](/docs/start/first-pipeline) walks through loading, filtering, and rendering a real image.
+- [Images & Promises](/docs/framework/images-promises) explains the graph model in more detail.
+- [Color & HDR](/docs/framework/color-hdr) is the page to read before processing extended-range content.
+- [Inside Raster](/docs/internals/repository-map) maps the source tree if you are changing the framework itself.

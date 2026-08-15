@@ -1,0 +1,35 @@
+---
+title: Support & Security
+description: Learn how to report usage questions, reproducible defects, compatibility regressions, and private security issues.
+---
+
+Raster is actively maintained. A useful report names the boundary that failed. A render mismatch, a package-import failure, a downstream Metal include error, and an example dependency failure need different evidence, even when they show up in the same build.
+
+## Usage questions
+
+Repository discussions are the place for questions about designing a graph, choosing how pixels are represented, or integrating an external framework. A useful question includes the platform, Raster version, input and output representation, and the smallest code that shows the question.
+
+## Defect reports
+
+A reproducible framework defect belongs in an issue. A useful issue includes:
+
+- Raster version or commit and package resolution state.
+- Xcode, Swift, OS, hardware, and Simulator/device distinction.
+- A minimal source image or generated pixel fixture when rendering is involved.
+- Alpha type, color space, pixel format, and headroom at the failing boundary.
+- Expected and observed pixels, error, crash, or compiler output.
+- Whether render graph optimization changes the result.
+
+Application-private code is easier to diagnose after it is reduced. A 2×2 bitmap and one filter are usually enough to show the failure. A whole editor pipeline usually buries the failure.
+
+## Compatibility reports from MetalPetal
+
+The [migration guide](/docs/start/migrating-from-metalpetal) is the first place to look. If the same `MTI*` call changes behavior after only the package and module migration, the report is a compatibility regression and includes the last MetalPetal version whose output was correct.
+
+## Security reports
+
+A suspected vulnerability is not disclosed in a public issue. A private report goes to `security@aldealabs.com` with a minimal reproduction, affected versions and platforms, expected and observed behavior, and your impact assessment. The repository security policy targets acknowledgement within seven calendar days and provides a fallback contact path if acknowledgement does not arrive.
+
+## Maintenance focus
+
+Raster's roadmap is driven by demanding production use across still-image, video, and general graphics pipelines. Maintenance stays tied to measured compatibility, correctness, and performance needs, and the framework stays usable outside any single app. MetalPetal 1.26 remains frozen except for severe security or data-corruption defects. New features and ordinary platform maintenance belong on Raster 2.x.

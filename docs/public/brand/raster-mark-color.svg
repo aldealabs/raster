@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Raster color mark">
+  <defs>
+    <path id="raster-sweep" d="M12 8 H48 A8 8 0 0 1 48 24 H16 A8 8 0 0 0 16 40 H48 A8 8 0 0 1 48 56 H12"/>
+    <clipPath id="raster-matte"><path d="M40 0 H64 V64 H40 V48 H48 V32 H32 V16 H40 Z"/></clipPath>
+  </defs>
+  <use href="#raster-sweep" fill="none" stroke="#FF4B2B" stroke-width="8" stroke-linecap="butt" stroke-linejoin="round"/>
+  <use href="#raster-sweep" fill="none" stroke="#3047FF" stroke-width="8" stroke-linecap="butt" stroke-linejoin="round" clip-path="url(#raster-matte)"/>
+</svg>

@@ -8,11 +8,11 @@
 import Foundation
 import ArgumentParser
 import URLExpressibleByArgument
-import MetalPetalSourceLocator
+import RasterSourceLocator
 
 public struct BoilerplateGenerator: ParsableCommand {
     
-    @Argument(help: "The root directory of the MetalPetal repo.")
+    @Argument(help: "The root directory of the Raster repo.")
     var projectRoot: URL
     
     enum CodingKeys: CodingKey {
@@ -26,13 +26,13 @@ public struct BoilerplateGenerator: ParsableCommand {
     public func run() throws {
         // Sources
         let blendModes = ["Normal","Darken","Multiply","ColorBurn","LinearBurn","DarkerColor","Lighten","Screen","ColorDodge","Add","LighterColor","Overlay","SoftLight","HardLight","VividLight","LinearLight","PinLight","HardMix", "Difference", "Exclusion", "Subtract", "Divide","Hue","Saturation","Color", "Luminosity"]
-        let sourceDirectory = MetalPetalSourcesRootURL(in: projectRoot)
+        let sourceDirectory = RasterSourcesRootURL(in: projectRoot)
         let shadersFileDirectory = sourceDirectory.appendingPathComponent("Shaders")
         for (file, content) in MTIVectorSIMDTypeSupportCodeGenerator.generate() {
             let url = sourceDirectory.appendingPathComponent(file)
             try! content.write(to: url, atomically: true, encoding: .utf8)
         }
-        for (file, content) in MetalPetalBlendingShadersCodeGenerator.generate(blendModes: blendModes) {
+        for (file, content) in RasterBlendingShadersCodeGenerator.generate(blendModes: blendModes) {
             let url = shadersFileDirectory.appendingPathComponent(file)
             try! content.write(to: url, atomically: true, encoding: .utf8)
         }

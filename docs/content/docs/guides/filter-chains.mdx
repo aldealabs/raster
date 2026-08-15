@@ -1,0 +1,65 @@
+---
+title: Filter Chains
+description: Learn how to connect filters with typed ports and `=>`, so branching graphs stay readable and cheap to build.
+---
+
+You can always assign one filter's `outputImage` to the next filter's input. Raster's Swift filter graph API adds typed ports and a compact `=>` operator for the cases where that assignment gets messy: a branch, or a filter that takes several images.
+
+## Linear chains
+
+`FilterGraph.makeImage` records port connections, resolves them in order, and returns the one image connected to `output`. Exactly one connection must reach that output port.
+
+```swift
+let saturation = MTISaturationFilter()
+saturation.saturation = 0.8
+
+let exposure = MTIExposureFilter()
+exposure.exposure = 0.25
+
+let contrast = MTIContrastFilter()
+contrast.contrast = 1.08
+
+let image = FilterGraph.makeImage { output in
+    input => saturation => exposure => contrast => output
+}
+```
+
+The filters still hold their own parameters. The builder only describes how images move from one port to the next.
+
+## Branching graphs
+
+A multi-input filter exposes typed ports so each incoming image can be connected separately. `inputPorts` uses dynamic member lookup to turn writable `MTIImage?` key paths into those ports. A unary filter also exposes `ioPort`. `outputPort` is on every filter.
+
+```swift
+let blend = MTIBlendFilter(blendMode: .softLight)
+blend.intensity = 0.7
+
+let image = FilterGraph.makeImage { output in
+    input => exposure => blend.inputPorts.inputBackgroundImage
+    texture => saturation => blend.inputPorts.inputImage
+    blend => output
+}
+```
+
+## Reusable subgraphs
+
+The `connect(to:)` operation on an output port is public. It still has to be called from `FilterGraph.makeImage` or `FilterGraph.connect`, because those methods set up the connection-building context and serialize builder mutation with the graph lock.
+
+```swift
+FilterGraph.connect {
+    source.outputPort.connect(to: exposure.ioPort)
+    exposure.outputPort.connect(to: sink.inputPort)
+}
+```
+
+`makeImage` returns an explicit root. That root makes evaluation and error handling clearer. `FilterGraph.connect` is the API when you already have a destination port and do not need a returned image.
+
+## Parameters and graph construction
+
+Scalar parameters, blend modes, output formats, and headroom belong on the filter before ports are connected. Mixing parameter mutation into the graph expression makes it hard to tell which state was captured when `outputImage` was read. The graph builder describes image flow.
+
+Filters are mutable. The same configured filter instance is not safe to reuse concurrently across unrelated graph builds. You can create or isolate the small filter builders instead. Static kernels and immutable images are the objects that stay reusable.
+
+<Aside title="Connections are evaluated, not retained" tone="note">
+  The graph API transfers image values through key paths while the builder completes, so rebuilding after a parameter change means running the builder again. There is no reactive binding between filters.
+</Aside>

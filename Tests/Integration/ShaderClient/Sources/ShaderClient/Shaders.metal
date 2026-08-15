@@ -1,5 +1,5 @@
 #include <metal_stdlib>
-#include <MetalPetal/MTIShaderLib.h>
+#include <Raster/MTIShaderLib.h>
 using namespace metal;
 
 fragment float4 shaderClientPassthrough(

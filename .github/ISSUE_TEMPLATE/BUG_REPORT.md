@@ -4,7 +4,7 @@ about: Something isn't working as expected
 ---
 
 <!--
-    Thanks for contributing to MetalPetal!
+    Thanks for contributing to Raster!
 
     Before you submit your issue, please replace each paragraph
     below with the relevant details for your bug, and complete
@@ -27,7 +27,7 @@ Do not report a suspected vulnerability in a public issue. Follow the private re
 
  Info                    | Value                               |
 -------------------------|-------------------------------------|
- MetalPetal Version      | e.g. 1.13.0
+ Raster Version          | e.g. 2.0.0
  Integration Method      | SwiftPM
  Platform & Version      | e.g. iOS 14.0 / macOS 10.15
  Device                  | e.g. MacBook Pro 16' / iPhone X

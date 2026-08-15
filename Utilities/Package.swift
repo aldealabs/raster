@@ -14,17 +14,17 @@ let package = Package(
     targets: [
         .target(
             name: "SwiftPackageGenerator",
-            dependencies: ["ArgumentParser", "URLExpressibleByArgument", "MetalPetalSourceLocator"]),
+            dependencies: ["ArgumentParser", "URLExpressibleByArgument", "RasterSourceLocator"]),
         .target(
             name: "BoilerplateGenerator",
-            dependencies: ["ArgumentParser", "SIMDType", "URLExpressibleByArgument", "MetalPetalSourceLocator"]),
+            dependencies: ["ArgumentParser", "SIMDType", "URLExpressibleByArgument", "RasterSourceLocator"]),
         .target(
             name: "UmbrellaHeaderGenerator",
-            dependencies: ["ArgumentParser", "URLExpressibleByArgument", "MetalPetalSourceLocator"]),
+            dependencies: ["ArgumentParser", "URLExpressibleByArgument", "RasterSourceLocator"]),
         .target(
             name: "URLExpressibleByArgument",
             dependencies: ["ArgumentParser"]),
-        .target(name: "MetalPetalSourceLocator"),
+        .target(name: "RasterSourceLocator"),
         .target(
             name: "main",
             dependencies: ["SwiftPackageGenerator", "BoilerplateGenerator", "UmbrellaHeaderGenerator"])

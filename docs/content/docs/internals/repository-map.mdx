@@ -1,0 +1,55 @@
+---
+title: Repository Map
+description: Learn how Raster keeps two source trees, with canonical code under Frameworks/ and generated SwiftPM projections under Sources/.
+---
+
+Raster keeps two source trees. Canonical framework code lives under `Frameworks/`. SwiftPM sees generated projections under `Sources/`.
+
+The two trees exist because the framework is older than modern SwiftPM resource handling, and the implementation is still a mix of Swift, Objective-C, Objective-C++, and Metal. The real code lives under `Frameworks/Raster`. SwiftPM sees generated projections of that tree under `Sources/Raster` and `Sources/RasterObjectiveC`. Those projections are outputs, not a second copy of the framework. The place to start is `Frameworks/Raster`.
+
+## What lives where
+
+| Path | What lives here |
+| --- | --- |
+| `Frameworks/Raster/` | Canonical public headers, Objective-C core, Swift overlay, shaders, filters, and kernels. |
+| `Sources/` | Generated SwiftPM target layout, header symlinks, module map, and built-in shader source wrapper. |
+| `Tests/RasterTests/` | Rendering, image loading, context, graph, shader argument, and compatibility tests. |
+| `Tests/Integration/` | Clean Swift, Objective-C, and downstream Metal consumers. |
+| `RasterExamples/` | iOS and macOS application-level integration examples. |
+| `Utilities/` | Boilerplate, umbrella-header, and SwiftPM source generators. |
+| `Scripts/` | Integration and release verification drivers. |
+| `.github/workflows/` | Hosted platform, generator, package, and integration gates. |
+| `docs/` | This documentation application and its content. |
+
+## Execution path
+
+`MTIImage` and `MTIImagePromise` are the graph, and `MTIContext` holds the long-lived device state. One evaluation happens in `MTIImageRenderingContext.mm`, which walks promises and manages transient textures until their last consumer is done.
+
+Recipes come from kernels. Kernel implementations create the concrete promise recipes that encode render, compute, MPS, and composition work.
+
+Filters sit above that path. They validate inputs, gather parameters, pick output dimensions and alpha behavior, then ask a kernel for an image. A filter bug can hide in public default state, recipe construction, generated shader code, or the resolver, so the first class whose name matches a ticket is not always the right place to start.
+
+## Generated files
+
+Blend shaders, SIMD encoders, umbrella headers, SwiftPM symlinks, and the embedded built-in Metal source are checked in. The generated tree is what a clean consumer compiles. If that consumer still sees yesterday's generated output, yesterday's generated files are what they compile, and the source change is not finished. Release verification runs every generator twice and requires a clean tracked diff plus no untracked products after each pass.
+
+## Test boundaries
+
+The root SwiftPM tests exercise behavior inside the repository, and Xcode runs cover iOS Simulator and Catalyst integration. Both destinations matter. Standalone fixtures are how package products, Objective-C module maps, namespaced Metal headers, and built-in library loading are proven from a consumer's perspective. Examples catch another class of application-target and resource failures.
+
+All of these suites matter. They compile different source languages and resolve resources through different build systems.
+
+## Source
+
+```text
+Package.swift                                      Public package graph and platform floors
+Frameworks/Raster/MTIImage.{h,m,swift}             Image value and source promises
+Frameworks/Raster/MTIContext.{h,m}                 Device state, caches, locks, capabilities
+Frameworks/Raster/MTIImageRenderingContext.mm      Promise traversal and texture lifetime
+Frameworks/Raster/MTIRenderGraphOptimization.m     Graph rewrite orchestration
+Frameworks/Raster/Kernels/                         Render, compute, and composition recipes
+Frameworks/Raster/Shaders/                         Canonical Metal interfaces and functions
+Utilities/Sources/                                 Checked-in source generation
+test.sh                                            Local platform matrix
+Scripts/verify-release.sh                          Clean release gate
+```

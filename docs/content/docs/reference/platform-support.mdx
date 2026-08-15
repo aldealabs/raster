@@ -1,0 +1,37 @@
+---
+title: Platform Support
+description: Deployment floors, simulator limits, and the toolchain Raster verifies.
+---
+
+Raster supports iOS, macOS, tvOS, and Mac Catalyst through Swift Package Manager. The package manifest sets the floors. Raster 2.0 keeps that baseline unless a platform API forces an explicit change.
+
+| Platform | Compatibility baseline | Normal validation |
+| --- | ---: | --- |
+| iOS | 11.0 | Generic device build and a current iOS Simulator test run. |
+| macOS | 10.13 | SwiftPM build/test and example application build. |
+| tvOS | 13.0 | Generic device build and simulator tests when a runtime is installed. |
+| Mac Catalyst | iOS 13-era Catalyst toolchain | Xcode test build against the package scheme. |
+
+The floor is the OS version where Raster's public APIs are availability-guarded. A given device can still miss a Metal feature or a built-in filter.
+
+## Device capabilities
+
+`MTIContext` records the device capabilities Raster already asked about:
+
+- `isMetalPerformanceShadersSupported`
+- `isYCbCrPixelFormatSupported`
+- `isMemorylessTextureSupported`
+- `isProgrammableBlendingSupported`
+- `defaultLibrarySupportsProgrammableBlending`
+
+Optional processing paths should consult these flags. Built-in filters fall back when they can, or they fail with a framework error if the subsystem they need is missing.
+
+## Simulator
+
+Raster runs in Simulator. Capability still depends on the host hardware, Xcode, and the installed runtime. The MetalPetal 1.26 capstone was validated with Xcode 26.3 on Apple silicon, including MPS-backed CLAHE tests in iOS Simulator. That Simulator result does not replace a device run for features that depend on pixel formats, memoryless textures, programmable blending, camera buffers, or encoder integration. Simulator is a good place for correctness and API coverage. Performance numbers that need to reflect a device should be measured on a device.
+
+## Toolchains
+
+Raster CI pins the primary Xcode version so the same compiler shows up again next week, and it keeps one current-runner smoke job so upcoming breakage shows up before a release. A toolchain is supported after the package tests, consumer fixtures, examples, and platform builds pass together. Objective-C modules, Metal includes, generated source, and platform SDKs can fail independently, so a single Swift compile is a thin signal.
+
+For the matrix, see [Tests & CI](/docs/contributing/tests-ci).

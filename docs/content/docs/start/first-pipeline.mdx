@@ -1,0 +1,89 @@
+---
+title: First Pipeline
+description: Learn how to load an image, describe a filter graph, and render it once with Raster.
+---
+
+This example desaturates an image, lifts its exposure, and renders a `CGImage`. It creates one context and keeps every intermediate as an `MTIImage`, so Raster can evaluate the whole graph when the output is requested.
+
+## Context
+
+```swift
+import Metal
+import Raster
+
+enum PipelineError: Error {
+    case metalUnavailable
+    case imageUnavailable
+}
+
+guard let device = MTLCreateSystemDefaultDevice() else {
+    throw PipelineError.metalUnavailable
+}
+
+let options = MTIContextOptions()
+let context = try MTIContext(device: device, options: options)
+```
+
+Creating a context initializes caches and rendering state, so it belongs near the lifetime of your renderer rather than inside a per-frame method. The context is thread-safe. The mutable filters you use to construct images are not.
+
+## Loading an image
+
+```swift
+guard let input = MTIImage(
+    contentsOf: imageURL,
+    options: .default,
+    isOpaque: true
+) else {
+    throw PipelineError.imageUnavailable
+}
+```
+
+`isOpaque: true` means every source pixel is fully opaque. That is appropriate for a typical JPEG, because Raster can skip alpha work. It is not appropriate merely because the current display surface ignores alpha.
+
+## Filters
+
+```swift
+let saturation = MTISaturationFilter()
+saturation.inputImage = input
+saturation.saturation = 0.72
+
+let exposure = MTIExposureFilter()
+exposure.inputImage = saturation.outputImage
+exposure.exposure = 0.4
+
+guard let output = exposure.outputImage else {
+    throw PipelineError.imageUnavailable
+}
+```
+
+Reading `outputImage` creates another image recipe. It does not submit commands to the GPU, so constructing several candidate outputs is cheap until you render one of them.
+
+The same graph can be expressed with the Swift filter graph API:
+
+```swift
+let output = FilterGraph.makeImage { graphOutput in
+    input => saturation => exposure => graphOutput
+}
+```
+
+The `=>` syntax validates connections and makes branching graphs easier to read. The public `connect(to:)` machinery is also available when a graph needs to be assembled outside the result-builder closure.
+
+## Rendering
+
+```swift
+let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+let cgImage = try context.makeCGImage(
+    from: output,
+    colorSpace: colorSpace
+)
+```
+
+This call resolves the graph, allocates or reuses textures, encodes Metal commands, waits for the result needed by Core Graphics, and returns an owned `CGImage`. For live display or video, render to a drawable, texture, or pixel buffer instead. A CPU-facing image on every frame is usually more work than those destinations need.
+
+## Lifetimes
+
+The `MTIContext` should live as long as the rendering subsystem. Source storage only needs to stay alive while a promise still requires it. Raster already retains the objects its built-in image promises use.
+
+A persistent `MTIImage` is useful when the same expensive intermediate is reused across independent renders. Mutable filters should be recreated or reconfigured on one queue, then their immutable output images can be passed onward.
+
+[Render Graphs & Caching](/docs/framework/render-graphs-caching) covers fan-out, repeated renders, and expensive shared stages.

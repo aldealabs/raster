@@ -1,0 +1,233 @@
+---
+title: Core Image Metal Kernels
+description: Learn how to compile Core Image kernels next to Raster shaders without sending both through the same Metal flags.
+---
+
+You can ship Raster shaders and Metal-backed `CIKernel` functions in the same target, but Xcode will not compile them as one pile of `.metal` files. Core Image kernels need a different compiler mode and a different Metal library linker mode. If those flags are applied to the whole target, ordinary vertex, fragment, and compute functions can vanish from `default.metallib`.
+
+Core Image source uses a distinct suffix and two custom build rules so Xcode can treat that suffix as its own pipeline:
+
+| Source | Compiler path | Runtime owner |
+| --- | --- | --- |
+| `*.metal` | Xcode Metal compiler → `default.metallib` | Raster or your `MTLDevice` |
+| `*.ci.metal` | `metal -fcikernel` → `*.ci.air` → `metallib -cikernel` → `*.ci.metallib` | `CIKernel` |
+
+The `.ci` segment is a convention. Xcode uses that file pattern to pick the Core Image pipeline and leave the target's ordinary Metal source on the default compiler.
+
+## Core Image kernel source
+
+Core Image's Metal dialect has its own header, namespace, sampler type, and entry-point rules. A one-pixel exposure kernel looks like this:
+
+```metal
+#include <CoreImage/CoreImage.h>
+#include <metal_stdlib>
+
+using namespace metal;
+
+extern "C" {
+  namespace coreimage {
+    float4 exposure(sampler source, float stops) {
+      float4 color = source.sample(source.coord());
+      return float4(color.rgb * exp2(stops), color.a);
+    }
+  }
+}
+```
+
+The file name is `Exposure.ci.metal`, and the file belongs in the application target's **Compile Sources** phase. The `*.ci.metal` rule below compiles it. The normal Metal compiler skips the file.
+
+## Compile rule
+
+The first custom rule lives on the application target under **Build Rules**. The field values have to match this table so Xcode will chain the AIR output later:
+
+| Field | Value |
+| --- | --- |
+| Process | Source files with names matching `*.ci.metal` |
+| Using | Custom script |
+| Run once per architecture | Off |
+| Output file | `$(DERIVED_FILE_DIR)/$(INPUT_FILE_BASE).air` |
+
+The script is:
+
+```sh
+xcrun metal -c -I $MTL_HEADER_SEARCH_PATHS -fcikernel \
+  "${INPUT_FILE_PATH}" -o "${SCRIPT_OUTPUT_FILE_0}"
+```
+
+All three non-default pieces matter. `-fcikernel` enables the Core Image dialect, `-c` produces AIR for the next rule, and the explicit output path tells Xcode how to order and cache the work. If `-c` is omitted, the later step commonly reports an invalid bitcode or unusable-library error, after the compile step already looked fine in the log.
+
+`DERIVED_FILE_DIR` is the right place for the intermediate. It is configuration- and target-specific, so parallel Debug, Release, device, and simulator builds do not overwrite one another or dirty the source tree.
+
+## Library rule
+
+A second custom build rule links the AIR into a Core Image metallib:
+
+| Field | Value |
+| --- | --- |
+| Process | Source files with names matching `*.ci.air` |
+| Using | Custom script |
+| Run once per architecture | Off |
+| Output file | `$(METAL_LIBRARY_OUTPUT_DIR)/$(INPUT_FILE_BASE).metallib` |
+
+The script is:
+
+```sh
+xcrun metallib -cikernel \
+  "${INPUT_FILE_PATH}" -o "${SCRIPT_OUTPUT_FILE_0}"
+```
+
+Xcode sees that the first rule emits a file matched by the second rule and chains them. For `Exposure.ci.metal`, `INPUT_FILE_BASE` is `Exposure.ci`, so the product is `Exposure.ci.metallib` sitting in `METAL_LIBRARY_OUTPUT_DIR` with the target's other Metal library resources. The generated AIR and metallib do not need to be added by hand.
+
+<Aside title="Keep the flags on the custom rules" tone="warning">
+  Do not set `MTL_COMPILER_FLAGS = -fcikernel` or `MTLLINKER_FLAGS = -cikernel` for a target that also compiles Raster or ordinary Metal shaders, because those settings affect the target's normal Metal pipeline and the file-pattern rules isolate the two dialects and preserve `default.metallib`.
+</Aside>
+
+## Header search paths
+
+Xcode does not automatically give a custom `xcrun metal` invocation the include paths it calculated for Swift, Objective-C, and SwiftPM dependencies. Those paths need to be forwarded in every configuration of the application target:
+
+```text
+MTL_HEADER_SEARCH_PATHS = "$(HEADER_SEARCH_PATHS)"
+```
+
+The compile rule passes that setting through `-I $MTL_HEADER_SEARCH_PATHS`. Ordinary Raster shaders in your app use the same setting when they include:
+
+```metal
+#include <Raster/MTIShaderLib.h>
+```
+
+Application headers go through that setting as well. One `-I` does not turn an arbitrary whitespace list into several compiler options. If the build setting contains several custom directories, the expanded command in Xcode's build log is what to inspect, and each directory needs its own `-I` argument. Paths containing spaces must stay quoted. `.build/checkouts`, a package cache, or a DerivedData directory are not include roots to point at, because the package resolver already tracks those paths for the package.
+
+Relative includes such as `#include "../Shared/Color.h"` can work, but they couple a shader to its current folder. A stable include root is the better option once two shaders share the header.
+
+## Loading the library
+
+Core Image does not discover these functions through `MTLDevice.makeDefaultLibrary()`. The generated metallib is loaded as data, and `CIKernel` is asked for a named function:
+
+```swift
+import CoreImage
+import Foundation
+
+enum CoreImageKernels {
+    enum LoadingError: Error {
+        case missingLibrary(String)
+        case missingFunction(String, available: [String])
+    }
+
+    static func load(
+        function name: String,
+        library resource: String,
+        bundle: Bundle = .main
+    ) throws -> CIKernel {
+        guard let url = bundle.url(
+            forResource: resource,
+            withExtension: "metallib"
+        ) else {
+            throw LoadingError.missingLibrary("\(resource).metallib")
+        }
+
+        let data = try Data(contentsOf: url)
+
+        do {
+            return try CIKernel(
+                functionName: name,
+                fromMetalLibraryData: data
+            )
+        } catch {
+            throw LoadingError.missingFunction(
+                name,
+                available: CIKernel.kernelNames(fromMetalLibraryData: data)
+            )
+        }
+    }
+}
+
+let exposureKernel = try CoreImageKernels.load(
+    function: "exposure",
+    library: "Exposure.ci"
+)
+```
+
+The resource argument includes the `.ci` portion because Xcode removes only the final `.metal` extension when it computes `INPUT_FILE_BASE`. `Bundle.main` is correct when the application target has the build rules and source. If a framework or resource package has the compiled library, that bundle is the one to pass instead. The type that calls the kernel does not decide where the resource lives.
+
+The data can be loaded and the kernels created once, then reused. Reading a metallib and reconstructing `CIKernel` objects for every frame adds file I/O and compilation work to the render path.
+
+## Region of interest
+
+A pointwise kernel reads the same source rectangle it writes, so its region-of-interest callback can return the requested rectangle unchanged and still be correct:
+
+```swift
+func applyingExposure(
+    to input: CIImage,
+    stops: Float,
+    kernel: CIKernel
+) throws -> CIImage {
+    guard let output = kernel.apply(
+        extent: input.extent,
+        roiCallback: { _, requestedRect in requestedRect },
+        arguments: [input, stops]
+    ) else {
+        throw PipelineError.imageUnavailable
+    }
+    return output
+}
+```
+
+That callback is part of the algorithm. A blur, morphology kernel, resampler, or any function that reads neighboring pixels must expand the requested rectangle by its sampling radius. Returning the output rectangle for a neighborhood kernel can create seams at Core Image tile boundaries even when a small test image looks correct.
+
+The result remains a `CIImage`. You can wrap it as a Raster source or feed the containing `CIFilter` through `MTICoreImageUnaryFilter` when Raster should schedule the next stages of the graph.
+
+## Verifying the build
+
+A normal Swift compile does not prove either Metal pipeline works. An integration test that loads the packaged library, names the exported kernel, and evaluates a small image is what exercises the resource:
+
+```swift
+func testCoreImageMetalLibraryExportsExposure() throws {
+    let kernel = try CoreImageKernels.load(
+        function: "exposure",
+        library: "Exposure.ci",
+        bundle: .main
+    )
+
+    let input = CIImage(color: CIColor(red: 0.25, green: 0.5, blue: 0.75))
+        .cropped(to: CGRect(x: 0, y: 0, width: 2, height: 2))
+
+    XCTAssertNotNil(
+        kernel.apply(
+            extent: input.extent,
+            roiCallback: { _, rect in rect },
+            arguments: [input, Float(1)]
+        )
+    )
+}
+```
+
+That test belongs in the application host or bundle that packages the metallib. A source-only package test using a different bundle can pass the Swift layer while never exercising the resource produced by the Xcode rules.
+
+Both custom rule invocations should expand in the build log. The sequence to confirm is:
+
+```text
+Exposure.ci.metal
+  → Exposure.ci.air
+  → Exposure.ci.metallib
+```
+
+A tiny Raster shader integration test is also useful, because it proves `default.metallib` still exports an ordinary function after the Core Image rules are added.
+
+## Common failures
+
+| Symptom | What it usually means | Check |
+| --- | --- | --- |
+| `Function does not exist in library data` | Wrong function name, wrong metallib, or a library linked without Core Image mode | Print `CIKernel.kernelNames(fromMetalLibraryData:)`; confirm both `-fcikernel` and `-cikernel` appear in the build log |
+| Invalid bitcode or library data | The first rule did not emit AIR | Confirm the compile command includes `-c` and writes `SCRIPT_OUTPUT_FILE_0` |
+| `Exposure.ci.metallib` is missing | Target membership, file pattern, or declared outputs do not match | Confirm the source is in **Compile Sources** and both output paths use `INPUT_FILE_BASE` |
+| `MTLDevice.makeFunction` returns `nil` for an ordinary shader | Core Image flags leaked into the normal target-wide Metal pipeline | Remove target-wide `-fcikernel` and `-cikernel`; keep them on the custom rules |
+| Raster or application headers cannot be found | The custom compiler invocation did not receive the resolved header paths | Forward `HEADER_SEARCH_PATHS` to `MTL_HEADER_SEARCH_PATHS`, then inspect every expanded `-I` argument |
+| Debug works but Archive fails | A path was tied to one DerivedData checkout or only one configuration has the setting | Compare Debug and Release settings; remove absolute package-cache paths |
+| A renamed kernel keeps loading stale code | The old generated metallib remains in DerivedData or the runtime still names the old resource | Clean the build folder, inspect the product bundle, and keep the filename, library resource, and function name separate |
+
+## Primary references
+
+- [Apple's `CIKernel` documentation](https://developer.apple.com/documentation/CoreImage/CIKernel) defines the source structure, loading API, and kernel application model.
+- [Metal Shading Language for Core Image Kernels](https://developer.apple.com/metal/MetalCIKLReference6.pdf) documents the Core Image compiler and linker modes.
+- [Xcode build settings](https://developer.apple.com/documentation/xcode/build-settings-reference) defines `MTL_HEADER_SEARCH_PATHS`, `DERIVED_FILE_DIR`, and the Metal compiler settings used by the rules.

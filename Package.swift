@@ -5,29 +5,29 @@
 import PackageDescription
 
 let package = Package(
-    name: "MetalPetal",
+    name: "Raster",
     platforms: [.macOS(.v10_13), .iOS(.v11), .tvOS(.v13)],
     products: [
         .library(
-            name: "MetalPetal",
-            targets: ["MetalPetal"]
+            name: "Raster",
+            targets: ["Raster"]
         )
     ],
     dependencies: [],
     targets: [
         .target(
-            name: "MetalPetal",
-            dependencies: ["MetalPetalObjectiveC"]),
+            name: "Raster",
+            dependencies: ["RasterObjectiveC"]),
         .target(
-            name: "MetalPetalObjectiveC",
+            name: "RasterObjectiveC",
             dependencies: []),
         .target(
-            name: "MetalPetalTestHelpers",
-            dependencies: ["MetalPetal"],
-            path: "Tests/MetalPetalTestHelpers"),
+            name: "RasterTestHelpers",
+            dependencies: ["Raster"],
+            path: "Tests/RasterTestHelpers"),
         .testTarget(
-            name: "MetalPetalTests",
-            dependencies: ["MetalPetal", "MetalPetalTestHelpers"]),
+            name: "RasterTests",
+            dependencies: ["Raster", "RasterTestHelpers"]),
     ],
     cxxLanguageStandard: .cxx14
 )

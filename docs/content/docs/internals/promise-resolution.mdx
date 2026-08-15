@@ -1,0 +1,49 @@
+---
+title: Promise Resolution
+description: Learn how a root MTIImage is resolved through dependency counts, recursive evaluation, encoding, and last-consumer texture release.
+---
+
+Promise resolution is the walk from a root `MTIImage` to encoded GPU work. A render builds an `MTIImageRenderingContext` around the long-lived `MTIContext` and a fresh command buffer. That rendering context walks the requested root promise recursively, keeps a per-render identity map of completed promises, and returns transient textures when the last dependent has used them.
+
+## Dependency counts
+
+`resolutionForImage:error:` begins by recognizing the root and walking every reachable promise dependency. `MTIImageRenderingDependencyGraph` records the dependent promises for each input promise, including duplicate edges when one promise consumes the same image more than once.
+
+Those counts decide lifetimes. Each intermediate stays alive until its final dependent has encoded the read. When render graph optimization is on, the root promise is optimized first and the dependency counts come from the rewritten graph.
+
+## Resolution order
+
+For each promise, the rendering context follows this order:
+
+1. The per-render result is returned when the same promise identity was already resolved.
+2. The long-lived context is asked for a persistent cached render target.
+3. Every dependency is resolved recursively and its sampler state is obtained.
+4. A temporary map from dependency images to resolved textures and samplers is installed.
+5. The promise's `resolve(with:)` implementation is called.
+6. Every input resolution is marked as consumed by this promise.
+7. The result is wrapped according to the root, transient, or persistent cache policy.
+
+A promise can call `resolvedTexture(for:)` only for an image listed in its current dependencies. The rendering context checks that restriction because an undeclared image would skip lifetime accounting.
+
+## Transient lifetimes
+
+Transient resolutions get an invalidation closure tied to the dependency graph. When no dependents remain, the render target returns its reusable texture to the pool. Each consumer removes one edge.
+
+Persistent images install a holder in the context's weak-key cache. That holder keeps the target texture across renders while the promise is still a valid cache key.
+
+The root result stays alive long enough for the destination operation to finish. The rendering context commits its command buffer during normal render handling, and it also commits an uncommitted buffer during teardown if one is still sitting there.
+
+## Errors
+
+Invalid dimensions fail before a promise resolves. Dependency or promise errors travel up to the root, and any render target acquired before the error is released. A custom promise that ends an encoder incorrectly, or returns a target with broken retain and release behavior, can still wreck this flow. Kernel recipes already follow this ownership model. A custom promise is only necessary when those recipes cannot express the work.
+
+## Source
+
+```text
+Frameworks/Raster/MTIImagePromise.h                 Promise protocol
+Frameworks/Raster/MTIImageRenderingContext.h       Public resolver surface for promises
+Frameworks/Raster/MTIImageRenderingContext.mm      Traversal, maps, and lifetime accounting
+Frameworks/Raster/MTIImagePromiseRenderTarget.*    Render-target ownership wrapper
+Frameworks/Raster/MTITexturePool.*                 Reusable texture reference counting
+Tests/RasterTests/RenderTests.swift                 Resolution and persistence coverage
+```

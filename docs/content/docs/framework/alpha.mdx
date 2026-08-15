@@ -1,0 +1,43 @@
+---
+title: Alpha
+description: Learn how straight, premultiplied, and opaque alpha types travel through a Raster graph.
+---
+
+Every `MTIImage` carries an alpha representation. Filters read it. That metadata says how RGB relates to opacity, including when the destination already has four channels and you still have to name the stored layout.
+
+## MTIAlphaType
+
+| `MTIAlphaType` | Pixel meaning |
+| --- | --- |
+| `.nonPremultiplied` | RGB stores the underlying color and alpha stores coverage independently. |
+| `.premultiplied` | RGB has already been multiplied by alpha and stores the contribution to the result. |
+| `.alphaIsOne` | Every pixel is opaque, whether or not the physical format has an alpha channel. |
+
+`.unknown` is there for values you cannot classify, but most processing kernels cannot handle that uncertainty safely. A concrete type at the input boundary is what those kernels expect.
+
+## Alpha at input
+
+```swift
+let jpeg = MTIImage(cgImage: jpegImage, isOpaque: true)
+
+let overlay = MTIImage(
+    cgImage: overlayImage,
+    isOpaque: false
+)
+```
+
+The overlay initializer uses the alpha behavior defined by the image-loading path. If another API hands you a texture or pixel buffer directly, the alpha type you pass is the type that exactly describes the values already sitting in that storage. Marking a translucent texture `.alphaIsOne` may look fine until something blends or converts it.
+
+## Alpha conversion
+
+`premultiplyingAlpha()` and `unpremultiplyingAlpha()` convert when an external API and your Raster graph expect different representations. Converting back and forth between filters is usually the wrong place. One representation for the graph, with conversion at input or output, is the typical setup. Most general Raster filters take straight or opaque inputs and return straight alpha. Filters with `outputAlphaType`, including blend and multilayer compositing, can produce whatever the next boundary needs, and transform and crop-style filters normally pass the input alpha type through unchanged.
+
+## How the wrong type changes color
+
+If premultiplied pixels are treated as straight, a translucent red edge walks into a color filter with RGB that is already darkened, then gets darkened again when you composite. If straight pixels are treated as premultiplied, RGB can contribute energy that alpha does not allow, which shows up as bright fringes. Both errors live in textures whose numbers are still legal, so the stored `alphaType` is what catches them.
+
+Raster validates compatible alpha types in debug builds where it can. Production builds cannot make every check free. A custom shader can still ignore the type it declared, so tests should hit translucent edges. Tests that only use opaque fixtures miss this.
+
+<Aside title="Display surfaces do not make pixels opaque" tone="warning">
+  `.alphaIsOne` is only correct when the stored pixels are actually opaque. A display surface that discards alpha does not make the input image opaque earlier in the graph.
+</Aside>

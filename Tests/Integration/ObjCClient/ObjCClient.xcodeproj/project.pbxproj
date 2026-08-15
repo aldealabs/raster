@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		6B0000000000000000000001 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 6B0000000000000000000011 /* main.m */; };
-		6B0000000000000000000002 /* MetalPetal in Frameworks */ = {isa = PBXBuildFile; productRef = 6B0000000000000000000021 /* MetalPetal */; };
+		6B0000000000000000000002 /* Raster in Frameworks */ = {isa = PBXBuildFile; productRef = 6B0000000000000000000021 /* Raster */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -21,7 +21,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				6B0000000000000000000002 /* MetalPetal in Frameworks */,
+				6B0000000000000000000002 /* Raster in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -68,7 +68,7 @@
 			);
 			name = ObjCClient;
 			packageProductDependencies = (
-				6B0000000000000000000021 /* MetalPetal */,
+				6B0000000000000000000021 /* Raster */,
 			);
 			productName = ObjCClient;
 			productReference = 6B0000000000000000000012 /* ObjCClient */;
@@ -186,10 +186,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		6B0000000000000000000021 /* MetalPetal */ = {
+		6B0000000000000000000021 /* Raster */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 6B0000000000000000000020 /* XCLocalSwiftPackageReference "../../.." */;
-			productName = MetalPetal;
+			productName = Raster;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

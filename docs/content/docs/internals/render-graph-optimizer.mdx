@@ -1,0 +1,47 @@
+---
+title: Render Graph Optimizer
+description: Learn how the optimizer fuses compatible transient recipes, leaves other nodes in place, and rebuilds the graph.
+---
+
+The render graph optimizer rewrites a graph before dependency counts are built. The rewrite is conservative, and filter order stays as written. The optimizer looks for specific promise families whose composition is already known to be equivalent, then rebuilds those recipes with the optimized dependencies.
+
+## Graph nodes
+
+`MTIRenderGraphOptimizer` walks from the root promise and creates one `MTIRenderGraphNode` per `MTIImage` identity. Each node records input nodes and a set of output promise identities, which is how an operation gets its unique dependent count.
+
+A persistent image is left in place because its texture identity and cross-render cache are observable performance behavior. The optimizer skips regenerating that node's dependencies.
+
+## Optimization rules
+
+`MTIColorMatrixRenderGraphNodeOptimize` folds compatible color-matrix work into one recipe when the upstream node has one dependent and the command shape allows it.
+
+Composition is the other pass. `MTIMultilayerCompositingRenderGraphNodeOptimize` concatenates compatible composition recipes so layers can share a render pass. That rule checks transient policy, kernel identity, output pixel format, a single dependent, and HDR headroom. Shader names are one of those checks. Fusing recipes with different headroom would evaluate one layer stack with the wrong headroom.
+
+## Rebuilding recipes
+
+After those passes update nodes, `generateOptimizedImageForNode` walks the graph again so each promise can receive the optimized input images through `promiseByUpdatingDependencies(_:)` and produce a new immutable recipe. A promise table keeps shared identities during this rebuild.
+
+Every promise implementation has to return an equivalent recipe when only its dependencies change. Copying most fields while dropping output alpha, format, sample count, headroom, dispatch options, or render region is an optimizer-only correctness bug.
+
+## Bounds
+
+Graph traversal is recursive. A pathological linear graph can expose accidental superlinear work, or deadlock if a filter graph builder and resolver share the wrong locks. The regression suite runs a 64-node exact-float chain under an external five-second timeout so a hang fails the gate without changing how the optimizer behaves on ordinary graphs.
+
+## New rules
+
+Before fusing another recipe family, the equivalence belongs in code and tests:
+
+1. Which parameters must match exactly?
+2. Must the upstream node have one dependent?
+3. Which cache policies make texture identity observable?
+4. Are alpha type, pixel format, extent, sample count, and headroom preserved?
+5. Does the optimized result match the original across both ordinary and edge-case pixels?
+
+## Source
+
+```text
+Frameworks/Raster/MTIRenderGraphOptimization.{h,m}       Graph construction and rebuild
+Frameworks/Raster/Kernels/MTIRenderPipelineKernel.m      Color-matrix optimization
+Frameworks/Raster/Kernels/MTIMultilayerCompositeKernel.m Composition optimization
+Tests/RasterTests/RenderTests.swift                       Fusion, boundary, and timeout tests
+```

@@ -1,0 +1,61 @@
+---
+title: Video & Pixel Buffers
+description: Learn how to run live and file-based video on the GPU, and keep each frame's pixel buffer from being recycled too soon.
+---
+
+Video in Raster goes through `CVPixelBuffer`. A source frame can become an `MTIImage` without a CPU copy, travel the same graph as a still image, and land in a destination buffer from AVFoundation, VideoToolbox, or your own pool.
+
+## Live frames
+
+A camera or player callback can wrap the current buffer, run it through the same filters a still image would use, and render into a destination buffer.
+
+```swift
+func process(_ pixelBuffer: CVPixelBuffer) throws {
+    let input = MTIImage(
+        cvPixelBuffer: pixelBuffer,
+        alphaType: .alphaIsOne
+    )
+
+    filter.inputImage = input
+    guard let output = filter.outputImage else { return }
+
+    try context.render(output, to: destinationPixelBuffer)
+}
+```
+
+Camera YCbCr buffers can use Raster's native two-plane path when the device supports it and `enablesYCbCrPixelFormatSupport` remains enabled. A kernel that cannot sample the YCbCr format directly may force a conversion to an RGB texture before its operation.
+
+## Pixel buffer pools
+
+A pixel-buffer pool only bounds allocation if callers release buffers promptly. The pool needs enough buffers for capture, GPU work, encoding, and presentation that can overlap. When the pool is empty, that is backpressure. A silent unbounded side channel would remove the bound the pool is there to provide.
+
+An `MTIImage` created from a pixel buffer retains the source needed by its promise, which stops the buffer from being freed too early. Holding old frame images around also stops the pool from recycling them.
+
+## AVFoundation compositions
+
+`MTIVideoComposition` and `MTIAsyncVideoCompositionRequestHandler` convert source track frames into `MTIImage` values, apply preferred track transforms, ask your closure for an output image, allocate a destination from the composition render context, and render into it.
+
+```swift
+let composition = MTIVideoComposition(
+    asset: asset,
+    context: context,
+    queue: processingQueue
+) { request in
+    guard let source = request.anySourceImage else {
+        throw PipelineError.imageUnavailable
+    }
+    return source.adjusting(exposure: 0.25)
+}
+
+playerItem.videoComposition = composition.makeAVVideoComposition()
+```
+
+You can write a custom compositor as well. The handler checks cancellation around filtering and rendering, and finishes each request exactly once. A custom compositor needs those same rules, because AVFoundation can cancel during expensive GPU work and an abandoned request holds buffers and blocks future frames.
+
+## Encoding
+
+Raster produces processed pixels. VideoToolbox or AVFoundation handles compression, timestamps, codec configuration, and container writing. Those jobs stay separate so the renderer can change without inheriting encoder-session behavior.
+
+<Aside title="Avoid CGImage in a frame loop" tone="warning">
+  Rendering every frame through `makeCGImage` introduces a CPU-facing image and synchronization that the encoder does not need. An encoder-compatible pixel buffer is the destination that avoids that cost.
+</Aside>

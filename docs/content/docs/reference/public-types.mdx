@@ -1,0 +1,61 @@
+---
+title: Public Types
+description: The Raster types for images, graphs, GPU programs, output, and framework bridges.
+---
+
+This page maps the public Raster types by the part of the pipeline they belong to. Most applications work with a short list of these types. Each row names the type and the role it plays, and the related framework pages cover the behavior in more detail than the generated interface.
+
+## Core graph
+
+| Type | What it does |
+| --- | --- |
+| `MTIImage` | Immutable image recipe, plus dimensions, alpha type, sampler, and cache policy. |
+| `MTIImagePromise` | Declares dependencies and knows how to resolve them into a texture. |
+| `MTIFilter` | Mutable configuration that produces an output image. |
+| `MTIUnaryFilter` | Filter with one standard input image. |
+| `FilterGraph` | Typed Swift port connections and graph construction. |
+| `MTIContext` | Thread-safe evaluation context, with caches, queues, pools, and output rendering. |
+
+## GPU programs
+
+| Type | What it does |
+| --- | --- |
+| `MTIFunctionDescriptor` | Metal function name, constants, and library location. |
+| `MTIRenderPipelineKernel` | Reusable vertex/fragment program that creates render promises. |
+| `MTIComputePipelineKernel` | Reusable compute program and dispatch configuration. |
+| `MTIRenderCommand` | One draw call inside a render pass Raster created. |
+| `MTIRenderPassOutputDescriptor` | Output dimensions, format, and attachment actions. |
+| `MTIDataBuffer` | Constant or mutable structured data passed to Metal arguments. |
+| `MTIGeometry` | Custom vertex data and draw-call encoding. |
+
+## Composition and effects
+
+| Type | What it does |
+| --- | --- |
+| `MTIBlendFilter` | Two-image blend with intensity, alpha output, and HDR headroom. |
+| `MultilayerCompositingFilter` | Swift layer-stack API over the Objective-C compositor. |
+| `MTILayer` | Objective-C layer representation used by the core compositor. |
+| `MTIMask` | Mask image, component, and interpretation. |
+| `MTIBlendMode` / `MTIBlendModes` | Extensible blend-mode identity and registry. |
+
+## I/O and presentation
+
+| Type | What it does |
+| --- | --- |
+| `MTICGImageLoadingOptions` | Color matching, orientation behavior, and texture storage for image loading. |
+| `MTICVPixelBufferRenderingOptions` | Core Video bridge and pixel-buffer input policy. |
+| `MTIDrawableRenderingRequest` | Image, drawable, resize mode, and destination behavior for display. |
+| `MTIImageView` / `MTIThreadSafeImageView` | Platform views that render an image through a context. |
+| `MTIRenderTask` | In-flight render completion and command-buffer lifetime. |
+
+## Framework bridges
+
+| Type | What it does |
+| --- | --- |
+| `MTICoreImageKernel` | Core Image closure or CIFilter evaluation inside a Raster promise. |
+| `MTICoreImageUnaryFilter` | Mutable unary wrapper around a CIFilter. |
+| `MTIVideoComposition` | AVFoundation composition backed by Raster rendering. |
+| `MTISCNSceneRenderer` | SceneKit output as an image promise. |
+| `MTISKSceneRenderer` | SpriteKit output as an image promise. |
+
+The built-in filter inventory is on [Built-in Filters](/docs/reference/built-in-filters). Implementation locations for these types are on [Repository Map](/docs/internals/repository-map).

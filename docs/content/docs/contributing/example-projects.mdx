@@ -1,0 +1,40 @@
+---
+title: Example Projects
+description: Learn how Raster's example apps demonstrate features and act as package-integration gates.
+---
+
+Raster examples have two jobs. A screen shows how a feature fits in an application. The same apps also prove the package works in targets that do not share the test suite's build environment. A demo that looks good and only builds with repository-local header paths fails that second job.
+
+## Scope
+
+Each screen stays on one primary rendering path. You can include enough UI to change parameters and enough media code to exercise the boundary. Reusable framework guidance belongs in the docs rather than in a growing comment block inside SwiftUI state.
+
+A useful feature example has a few regular pieces:
+
+1. One context for the screen or rendering owner.
+2. Mutable filters kept off concurrent view updates.
+3. A bundled deterministic fixture when the result should be reviewable.
+4. Missing device capabilities as visible state rather than a crash.
+5. Downstream Metal source in the example target when header and library integration is part of the feature.
+
+## Package resolution
+
+The project resolves Raster as a package. It does not reach into `Frameworks/`, copy generated headers, or assume a developer's DerivedData path. The integration driver supplies isolated package and DerivedData directories so those assumptions surface as failures.
+
+## Example dependencies
+
+The current examples include VideoIO 2.0.3 for camera and file workflows. Its pinned macOS incompatibility under Xcode 26 is documented and opt-in. Raster does not hide that incompatibility behind a compiler workaround. If an example dependency blocks a maintained platform permanently, the dependency is updated or replaced, or that example is separated from the default target. Raster's own build settings are not weakened globally to accommodate an example dependency.
+
+## Naming
+
+Example project, scheme, target, product, app entry point, bundle identifier, and file banners may adopt Raster immediately because they are demonstration assets. Public `MTI*` types and the compatibility tag remain separate concerns.
+
+## Where to look
+
+```text
+RasterExamples.xcodeproj                            Project and shared schemes
+RasterExamples/Shared/HomeView.swift                Example navigation
+RasterExamples/Shared/Shaders.metal                 Consumer Metal source
+RasterExamples/Shared/Supporting Types/             Demo-only UI and fixtures
+Scripts/test-integration.sh                          Isolated application builds
+```

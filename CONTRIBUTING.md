@@ -1,8 +1,8 @@
 ## Contributing
 
-MetalPetal 1.x is in maintenance mode. Contributions should address severe security defects, data-corruption defects, or regressions within the existing compatibility contract.
+Raster is actively maintained. Contributions should preserve the established `MTI*` contracts, include focused regression coverage where behavior changes, and keep the generated SwiftPM layout synchronized with its canonical sources.
 
-New feature development belongs to Raster 2.x, which begins after the MetalPetal 1.26.0 tag.
+MetalPetal 1.26.x is a frozen compatibility line. Only severe security or data-corruption defects should be backported there; ordinary fixes, platform maintenance, and new development belong to Raster 2.x.
 
 Report suspected security vulnerabilities privately according to [SECURITY.md](SECURITY.md); do not disclose them in a public issue.
 

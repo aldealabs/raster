@@ -1,0 +1,38 @@
+---
+title: Packages & Modules
+description: Learn how Raster is published as one SwiftPM product, why the core is mixed-language, and how Metal headers reach the shader compiler.
+---
+
+Raster ships as one Swift Package Manager library product and one public module: `Raster`. Behind the product, the framework is a mixed-language implementation. An Objective-C and Objective-C++ core carries most of the stable public surface and the render machinery. Swift adds the ergonomic APIs, filter graphs, Core Image integration, and modern conveniences.
+
+## Public imports
+
+| Consumer | Boundary |
+| --- | --- |
+| Swift | `import Raster` |
+| Objective-C | `#import <Raster/Raster.h>` |
+| Metal | `#include <Raster/MTIShaderLib.h>` |
+
+The `MTI*` names stay public after the module rename, and they remain the framework's vocabulary. The published module is `Raster`. Nothing here re-exports a module named MetalPetal.
+
+## Mixed-language implementation
+
+Metal itself is exposed through Objective-C protocols, and the existing core expresses the runtime behavior well. Several CPU-hot internals use Objective-C++ data structures. Swift is the better home for key-path-based filter ports and closure-based Core Image integration. Raster can modernize each area where the change earns its risk. A whole-language rewrite would spend compatibility budget without changing the GPU work.
+
+The public product hides implementation-only submodules. The Objective-C Core and Extension targets exist so SwiftPM can compile the mixed source graph, and they are not public imports. The public import is the `Raster` product.
+
+## Downstream Metal headers
+
+SwiftPM publishes the namespaced shader header. Xcode's Swift and C compiler search paths are not automatically applied to the Metal compiler. The Metal compiler needs those paths forwarded:
+
+```text
+MTL_HEADER_SEARCH_PATHS = "$(HEADER_SEARCH_PATHS)"
+```
+
+A copied `MTIShaderLib.h`, an absolute `.build/checkouts` path, or an umbrella-header alias detaches the shader interface from the exact Raster version SwiftPM resolved.
+
+## Source distribution and generated links
+
+The canonical implementation lives under `Frameworks/`. SwiftPM-facing `Sources/` entries are generated symlinks and generated support files that expose the same source in target-shaped directories. Edits belong in the canonical file. After the generators run, a second generator pass is expected to be byte-identical.
+
+That layout is unusual enough to deserve an integration test. Raster's fixtures build Swift, Objective-C, and downstream Metal consumers from clean scratch directories so package-boundary failures cannot hide behind the repository's own header layout.

@@ -1,11 +1,11 @@
 import Foundation
 import ArgumentParser
 import URLExpressibleByArgument
-import MetalPetalSourceLocator
+import RasterSourceLocator
 
 public struct SwiftPackageGenerator: ParsableCommand {
     
-    @Argument(help: "The root directory of the MetalPetal repo.")
+    @Argument(help: "The root directory of the Raster repo.")
     var projectRoot: URL
     
     enum CodingKeys: CodingKey {
@@ -15,9 +15,9 @@ public struct SwiftPackageGenerator: ParsableCommand {
     private let fileManager = FileManager()
     
     private let objectiveCModuleMapContents = """
-    module MetalPetalObjectiveC {
+    module RasterObjectiveC {
         explicit module Core {
-            header "MetalPetal.h"
+            header "Raster.h"
             export *
         }
         explicit module Extension {
@@ -32,14 +32,14 @@ public struct SwiftPackageGenerator: ParsableCommand {
     public init() { }
     
     public func run() throws {
-        let sourcesDirectory = MetalPetalSourcesRootURL(in: projectRoot)
+        let sourcesDirectory = RasterSourcesRootURL(in: projectRoot)
         let packageSourcesDirectory = projectRoot.appendingPathComponent("Sources/")
         try? fileManager.removeItem(at: packageSourcesDirectory)
         try fileManager.createDirectory(at: packageSourcesDirectory, withIntermediateDirectories: true, attributes: nil)
-        let swiftTargetDirectory = packageSourcesDirectory.appendingPathComponent("MetalPetal/")
-        let objectiveCTargetDirectory = packageSourcesDirectory.appendingPathComponent("MetalPetalObjectiveC/")
-        let objectiveCHeaderDirectory = packageSourcesDirectory.appendingPathComponent("MetalPetalObjectiveC/include/")
-        let objectiveCNamespacedHeaderDirectory = objectiveCHeaderDirectory.appendingPathComponent("MetalPetal/")
+        let swiftTargetDirectory = packageSourcesDirectory.appendingPathComponent("Raster/")
+        let objectiveCTargetDirectory = packageSourcesDirectory.appendingPathComponent("RasterObjectiveC/")
+        let objectiveCHeaderDirectory = packageSourcesDirectory.appendingPathComponent("RasterObjectiveC/include/")
+        let objectiveCNamespacedHeaderDirectory = objectiveCHeaderDirectory.appendingPathComponent("Raster/")
         try fileManager.createDirectory(at: swiftTargetDirectory, withIntermediateDirectories: true, attributes: nil)
         try fileManager.createDirectory(at: objectiveCTargetDirectory, withIntermediateDirectories: true, attributes: nil)
         try fileManager.createDirectory(at: objectiveCHeaderDirectory, withIntermediateDirectories: true, attributes: nil)

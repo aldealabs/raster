@@ -1,0 +1,56 @@
+---
+title: Glossary
+description: Terms Raster uses for image graphs, rendering, pixels, and builds.
+---
+
+This glossary defines Raster terms that have a specific meaning. Alpha, cache policy, and the render graph are usually the first places they appear.
+
+## Image graph terms
+
+**Image.** An immutable `MTIImage` value containing a promise plus dimensions, alpha type, sampler descriptor, and cache policy. It may not have a resolved texture.
+
+**Promise.** An object that declares image dependencies and knows how to resolve them into a render target when the context evaluates the graph.
+
+**Dependency.** An input `MTIImage` whose texture a promise requires during resolution.
+
+**Render graph.** The directed graph formed by walking from the requested output through each promise and the images that promise depends on.
+
+**Kernel.** A reusable GPU-program description. It creates image promises when applied to inputs and parameters.
+
+**Filter.** A mutable API object that configures a processing operation and returns an immutable output image you can pass to the next node.
+
+## Rendering terms
+
+**Context.** The thread-safe `MTIContext` that holds device-level caches, the command queue, texture pool, Core Image context, and built-in library.
+
+**Render target.** A texture plus the wrapper Raster uses as the output of one resolved promise.
+
+**Transient image.** Once the current evaluation is done with it, the resolved texture of a transient image can return to the context's pool.
+
+**Persistent image.** An image whose resolved result is retained for reuse across evaluations until its lifetime ends or resources are reclaimed.
+
+**Working pixel format.** The context's default format for intermediates whose kernel output format is unspecified.
+
+**Programmable blending.** A Metal capability that lets compatible blend work happen in the render pipeline without sampling a separately materialized background texture.
+
+## Pixel terms
+
+**Straight / nonpremultiplied alpha.** RGB describes the underlying color independently of alpha.
+
+**Premultiplied alpha.** RGB has been multiplied by alpha and describes the pixel's contribution to a composite.
+
+**Opaque / alpha-is-one.** Every stored pixel is treated as fully opaque.
+
+**Color space.** Primaries, white point, and transfer behavior that give RGB component values meaning, even though a normal Metal texture does not store a complete color-space tag.
+
+**Headroom.** The maximum meaningful color-component value used to normalize bounded HDR operations. Raster's default is 1 for SDR compatibility.
+
+**Extended range.** Numerical color values outside the normalized 0...1 interval, normally stored in a float-capable texture.
+
+## Build terms
+
+**Canonical source.** The editable implementation under `Frameworks/`. SwiftPM target layouts under `Sources/` are generated from it.
+
+**Built-in Metal library.** Raster's generated and compiled shader library containing the functions used by standard kernels.
+
+**Consumer fixture.** A small standalone package or Xcode project whose job is to prove the published package boundary works without any repository-local build assumptions.

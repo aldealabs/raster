@@ -25,7 +25,7 @@ simulator_udid() {
 
 scratch_root=""
 cleanup() {
-    if [[ -n "$scratch_root" && "$scratch_root" == */metalpetal-test.* ]]; then
+    if [[ -n "$scratch_root" && "$scratch_root" == */raster-test.* ]]; then
         rm -rf -- "$scratch_root"
     fi
 }
@@ -34,7 +34,7 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-scratch_root="$(mktemp -d "${TMPDIR:-/tmp}/metalpetal-test.XXXXXX")"
+scratch_root="$(mktemp -d "${TMPDIR:-/tmp}/raster-test.XXXXXX")"
 git -C "$repo_root" status --porcelain=v1 -uall > "$scratch_root/status-before"
 git -C "$repo_root" diff --binary --no-ext-diff -- > "$scratch_root/diff-before"
 
@@ -60,11 +60,11 @@ echo "------------------"
 
 xcodebuild test \
     -workspace . \
-    -scheme MetalPetal \
+    -scheme Raster \
     -destination 'platform=macOS' \
     -destination-timeout 30 \
     -parallel-testing-enabled NO \
-    -only-testing:MetalPetalTests/RenderTests/testRenderGraphOptimizerCompletesSixtyFourNodeChain \
+    -only-testing:RasterTests/RenderTests/testRenderGraphOptimizerCompletesSixtyFourNodeChain \
     -test-timeouts-enabled YES \
     -default-test-execution-time-allowance 5 \
     -maximum-test-execution-time-allowance 5 \
@@ -88,13 +88,13 @@ if [[ -n "$ios_udid" ]]; then
     echo "Using iOS Simulator: $ios_udid"
     xcodebuild build \
         -workspace . \
-        -scheme MetalPetal \
+        -scheme Raster \
         -destination "platform=iOS Simulator,id=$ios_udid" \
         CODE_SIGNING_ALLOWED=NO \
         CODE_SIGNING_REQUIRED=NO
     xcodebuild test \
         -workspace . \
-        -scheme MetalPetal \
+        -scheme Raster \
         -destination "platform=iOS Simulator,id=$ios_udid" \
         -parallel-testing-enabled NO \
         CODE_SIGNING_ALLOWED=NO \
@@ -109,13 +109,13 @@ echo "------------------"
 
 xcodebuild build \
     -workspace . \
-    -scheme MetalPetal \
+    -scheme Raster \
     -destination 'platform=macOS,variant=Mac Catalyst' \
     CODE_SIGNING_ALLOWED=NO \
     CODE_SIGNING_REQUIRED=NO
 xcodebuild test \
     -workspace . \
-    -scheme MetalPetal \
+    -scheme Raster \
     -destination 'platform=macOS,variant=Mac Catalyst' \
     -parallel-testing-enabled NO \
     CODE_SIGNING_ALLOWED=NO \
@@ -130,13 +130,13 @@ if [[ -n "$tvos_udid" ]]; then
     echo "Using tvOS Simulator: $tvos_udid"
     xcodebuild build \
         -workspace . \
-        -scheme MetalPetal \
+        -scheme Raster \
         -destination "platform=tvOS Simulator,id=$tvos_udid" \
         CODE_SIGNING_ALLOWED=NO \
         CODE_SIGNING_REQUIRED=NO
     xcodebuild test \
         -workspace . \
-        -scheme MetalPetal \
+        -scheme Raster \
         -destination "platform=tvOS Simulator,id=$tvos_udid" \
         -parallel-testing-enabled NO \
         CODE_SIGNING_ALLOWED=NO \
@@ -151,7 +151,7 @@ echo "------------------"
 
 xcodebuild build \
     -workspace . \
-    -scheme MetalPetal \
+    -scheme Raster \
     -destination 'generic/platform=iOS' \
     CODE_SIGNING_ALLOWED=NO \
     CODE_SIGNING_REQUIRED=NO
@@ -162,7 +162,7 @@ echo "------------------"
 
 if xcodebuild build \
     -workspace . \
-    -scheme MetalPetal \
+    -scheme Raster \
     -destination 'generic/platform=tvOS' \
     CODE_SIGNING_ALLOWED=NO \
     CODE_SIGNING_REQUIRED=NO 2>&1 | tee "$scratch_root/tvos-device-build.log"; then

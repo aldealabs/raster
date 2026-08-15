@@ -42,9 +42,9 @@ struct BlendFormulaSupport {
         
         {MTIBlendFormula}
         
-        \(MetalPetalBlendingShadersCodeGenerator.generateBlendFilterFragmentShader(shaderFunctionName: "customBlend", blendFunctionName: "blend"))
+        \(RasterBlendingShadersCodeGenerator.generateBlendFilterFragmentShader(shaderFunctionName: "customBlend", blendFunctionName: "blend"))
         
-        \(MetalPetalBlendingShadersCodeGenerator.generateMultilayerCompositeFilterFragmentShader(shaderFunctionName: "multilayerCompositeCustomBlend", blendFunctionName: "blend"))
+        \(RasterBlendingShadersCodeGenerator.generateMultilayerCompositeFilterFragmentShader(shaderFunctionName: "multilayerCompositeCustomBlend", blendFunctionName: "blend"))
         
         )mtirawstring";
 

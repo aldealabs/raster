@@ -1,0 +1,47 @@
+---
+title: Examples
+description: Learn how the example apps demonstrate still-image, live-video, compositing, and custom-shader integration.
+---
+
+`RasterExamples.xcodeproj` is a collection of small rendering paths rather than a single tutorial application. Each screen owns enough setup to show how a feature behaves in a real Apple-platform target: where the context lives, how an image reaches the filter, and which output path drives the view or recorder.
+
+## Running the project
+
+Open `RasterExamples.xcodeproj`, choose either the iOS or macOS scheme, and build. The package is resolved from the repository checkout, so edits to framework source are visible without publishing a version.
+
+The macOS example retains a pinned VideoIO dependency whose source is not accepted by Xcode 26 without an upstream compatibility change. Raster's integration driver reports that boundary explicitly and continues through the framework-owned gates. The iOS example remains part of the normal unsigned build validation.
+
+## Example index
+
+| Example | What it demonstrates |
+| --- | --- |
+| `SimpleImageFilterView` | The shortest source → filter → display path. |
+| `ImageFilterView` | Parameterized still-image filters and interactive updates. |
+| `BlendModesView` | Two-input blend modes and their visible differences. |
+| `MultilayerCompositingFilterView` | Layer transforms, masks, tint, and compositing order. |
+| `CameraFilterView` | Live `CVPixelBuffer` input and filtered preview. |
+| `VideoProcessorView` | File-based video composition and export integration. |
+| `CLAHEFilterView` | MPS-backed local contrast processing. |
+| `BokehEffectView` | A larger graph combining multiple filters. |
+| `SketchBoardView` | Custom rendering and interactive content. |
+| `SceneKitSupportView` | Rendering a SceneKit scene into the Raster graph. |
+
+## Using the examples
+
+The examples include application concerns such as media pickers, camera sessions, and SwiftUI state. When you copy a pattern, the Raster pieces are the useful part. The demo's UI lifetime is not.
+
+In production, the context generally belongs to a renderer or service, filters belong to the operation that configures them, and views consume immutable output images.
+
+<Aside title="Examples are also build gates" tone="note">
+  A source file can compile in the package test target while failing in an application target with different resource and Metal-header behavior. The examples stay buildable because they exercise the same boundary ordinary consumers use.
+</Aside>
+
+## Source
+
+```text
+RasterExamples.xcodeproj                     Schemes, targets, package wiring
+RasterExamples/Shared/HomeView.swift         Example index
+RasterExamples/Shared/MetalKitView.swift     Metal-backed display bridge
+RasterExamples/Shared/Shaders.metal          Downstream shader integration
+Scripts/test-integration.sh                  Clean consumer and example gates
+```

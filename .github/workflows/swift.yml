@@ -49,11 +49,11 @@ jobs:
         run: |
           xcodebuild test \
             -workspace . \
-            -scheme MetalPetal \
+            -scheme Raster \
             -destination 'platform=macOS' \
             -destination-timeout 30 \
             -parallel-testing-enabled NO \
-            -only-testing:MetalPetalTests/RenderTests/testRenderGraphOptimizerCompletesSixtyFourNodeChain \
+            -only-testing:RasterTests/RenderTests/testRenderGraphOptimizerCompletesSixtyFourNodeChain \
             -test-timeouts-enabled YES \
             -default-test-execution-time-allowance 5 \
             -maximum-test-execution-time-allowance 5 \
@@ -102,13 +102,13 @@ jobs:
           echo "Using iOS Simulator: $ios_udid"
           xcodebuild build \
             -workspace . \
-            -scheme MetalPetal \
+            -scheme Raster \
             -destination "platform=iOS Simulator,id=$ios_udid" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
           xcodebuild test \
             -workspace . \
-            -scheme MetalPetal \
+            -scheme Raster \
             -destination "platform=iOS Simulator,id=$ios_udid" \
             -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -153,13 +153,13 @@ jobs:
           echo "Using tvOS Simulator: $tvos_udid"
           xcodebuild build \
             -workspace . \
-            -scheme MetalPetal \
+            -scheme Raster \
             -destination "platform=tvOS Simulator,id=$tvos_udid" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
           xcodebuild test \
             -workspace . \
-            -scheme MetalPetal \
+            -scheme Raster \
             -destination "platform=tvOS Simulator,id=$tvos_udid" \
             -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -180,7 +180,7 @@ jobs:
         run: |
           xcodebuild build \
             -workspace . \
-            -scheme MetalPetal \
+            -scheme Raster \
             -destination 'platform=macOS,variant=Mac Catalyst' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
@@ -188,7 +188,7 @@ jobs:
         run: |
           xcodebuild test \
             -workspace . \
-            -scheme MetalPetal \
+            -scheme Raster \
             -destination 'platform=macOS,variant=Mac Catalyst' \
             -parallel-testing-enabled NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -209,13 +209,13 @@ jobs:
         run: |
           xcodebuild build \
             -workspace . \
-            -scheme MetalPetal \
+            -scheme Raster \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO
           xcodebuild build \
             -workspace . \
-            -scheme MetalPetal \
+            -scheme Raster \
             -destination 'generic/platform=tvOS' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO

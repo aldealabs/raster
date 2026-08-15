@@ -1,13 +1,13 @@
 ---
 name: ❓ Discussions & Questions
-about: Discussions or questions about MetalPetal
+about: Discussions or questions about Raster
 ---
 
 <!--
-    Thanks for contributing to MetalPetal!
+    Thanks for contributing to Raster!
 
-    Ordinary support is maintenance-only. Read SUPPORT.md before opening
-    a discussion so the frozen MetalPetal 1.x support scope is clear.
+    Read SUPPORT.md before opening a discussion so the supported package,
+    platforms, and MetalPetal compatibility boundary are clear.
 
     Before you submit your issue, please complete the steps
     in the checklist by placing an 'x' in each box:

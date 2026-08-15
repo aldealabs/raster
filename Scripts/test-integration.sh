@@ -7,7 +7,7 @@ scratch_parent="${TMPDIR:-/tmp}"
 scratch_root=""
 
 cleanup() {
-    if [[ -n "$scratch_root" && "$scratch_root" == */metalpetal-integration.* ]]; then
+    if [[ -n "$scratch_root" && "$scratch_root" == */raster-integration.* ]]; then
         rm -rf -- "$scratch_root"
     fi
 }
@@ -17,7 +17,7 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-scratch_root="$(mktemp -d "${scratch_parent%/}/metalpetal-integration.XXXXXX")"
+scratch_root="$(mktemp -d "${scratch_parent%/}/raster-integration.XXXXXX")"
 git -C "$repo_root" status --porcelain=v1 --untracked-files=all > "$scratch_root/status-before"
 
 echo "Building Swift package consumer"
@@ -60,7 +60,7 @@ build_example() {
 
     echo "Building $scheme_name"
     xcodebuild \
-        -project "$repo_root/MetalPetalExamples.xcodeproj" \
+        -project "$repo_root/RasterExamples.xcodeproj" \
         -scheme "$scheme_name" \
         -configuration Debug \
         -destination "$destination_name" \
@@ -73,13 +73,13 @@ build_example() {
         build
 }
 
-if [[ "${METALPETAL_TEST_MACOS_EXAMPLE:-0}" == 1 ]]; then
-    build_example "MetalPetalExamples (macOS)" "platform=macOS" macos-example
+if [[ "${RASTER_TEST_MACOS_EXAMPLE:-0}" == 1 ]]; then
+    build_example "RasterExamples (macOS)" "platform=macOS" macos-example
 else
-    echo "Skipping MetalPetalExamples (macOS): pinned VideoIO 2.0.3 fails under Xcode 26 at Camera.swift:383-384."
-    echo "Set METALPETAL_TEST_MACOS_EXAMPLE=1 to retry the normal build without workarounds."
+    echo "Skipping RasterExamples (macOS): pinned VideoIO 2.0.3 fails under Xcode 26 at Camera.swift:383-384."
+    echo "Set RASTER_TEST_MACOS_EXAMPLE=1 to retry the normal build without workarounds."
 fi
-build_example "MetalPetalExamples (iOS)" "generic/platform=iOS" ios-example
+build_example "RasterExamples (iOS)" "generic/platform=iOS" ios-example
 
 git -C "$repo_root" status --porcelain=v1 --untracked-files=all > "$scratch_root/status-after"
 if ! cmp -s "$scratch_root/status-before" "$scratch_root/status-after"; then

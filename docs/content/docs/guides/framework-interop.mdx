@@ -1,0 +1,56 @@
+---
+title: Framework Interop
+description: Learn how to use Core Image, SceneKit, SpriteKit, UIKit, AppKit, and your own Metal work in a Raster pipeline.
+---
+
+Raster can sit in the middle of an image pipeline without a rewrite of every producer or consumer. Each framework keeps doing the part it already understands. Core Image evaluates `CIFilter`s. SceneKit and SpriteKit still render the scene themselves. Raster only schedules the graph around the `MTIImage` those renderers hand back.
+
+## Core Image
+
+You can wrap a `CIImage` directly when that image is already your source, or drop a `CIFilter` into the Raster graph with `MTICoreImageUnaryFilter`.
+
+```swift
+let ciFilter = CIFilter.gaussianBlur()
+ciFilter.radius = 8
+
+let filter = MTICoreImageUnaryFilter()
+filter.inputImage = input
+filter.filter = ciFilter
+filter.outputAlphaType = .premultiplied
+
+let output = filter.outputImage
+```
+
+Raster copies the CIFilter configuration and picks a finite render region. Translated finite extents are normalized into the output texture. Infinite or null extents fall back to the input bounds unless you provide `outputImageSize`.
+
+If several Core Image filters can be combined into one CIFilter, that combination belongs on the Core Image side before the graph crosses back into Raster. Core Image can then optimize its own subgraph, and you skip paying a bridge for every small operation.
+
+An application that ships both Raster shaders and Metal-backed Core Image kernels needs two compiler paths in the same Xcode target. The [Core Image Metal kernels guide](/docs/guides/core-image-metal-kernels) covers the file naming, custom build rules, header paths, library loading, and bundle tests that keep those paths separate.
+
+## SceneKit and SpriteKit
+
+`MTISCNSceneRenderer` and `MTISKSceneRenderer` expose scene output as an `MTIImage`, which can feed normal filters and compositors. The scene renderer's color space and sample count need to stay aligned with the Raster destination. A linear SceneKit render displayed as if it were gamma-encoded looks dark. Metal will still succeed.
+
+## UIKit and AppKit
+
+Raster can construct images from `UIImage` and `NSImage` while preserving orientation and, for a Core Image-backed `UIImage`, the configured scale used to rasterize it. Those convenience paths are handy at the UI. A sustained render loop can use `MTIImageView`, a drawable request, or a direct texture path, and should not bounce through platform image objects every frame.
+
+## Custom Metal renderers
+
+An existing `MTLTexture` can be wrapped as an input when Raster only needs to consume it. Raster can also render into a texture your engine already has when the next stage expects a stable texture identity.
+
+```swift
+let input = MTIImage(texture: sourceTexture, alphaType: .alphaIsOne)
+
+try context.startTask(
+    toRender: output,
+    to: destinationTexture,
+    destinationAlphaType: .alphaIsOne
+)
+```
+
+If the producer and Raster do not share a queue, the work has to be ordered with command-buffer sequencing or explicit events. Holding onto a texture object says nothing about whether its previous writer has completed.
+
+## JavaScriptCore
+
+The historical MetalPetalJS experiment is not part of Raster's maintained 2.x surface. A downloadable dynamic filter system would still need a current security, shader-validation, and versioning design. Modern Swift can expose Objective-C-compatible objects to JavaScriptCore. That prototype is easy to inherit by accident, and it is not a starting point for a current design.

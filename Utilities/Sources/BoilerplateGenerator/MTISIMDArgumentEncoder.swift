@@ -11,7 +11,7 @@ import SIMDType
 fileprivate let template: String = """
 //
 //  MTISIMDArgumentEncoder.swift
-//  MetalPetal
+//  Raster
 //
 //  Auto-generated.
 //
@@ -20,7 +20,7 @@ import Foundation
 import Metal
 
 #if SWIFT_PACKAGE
-import MetalPetalObjectiveC.Core
+import RasterObjectiveC.Core
 #endif
 
 @objc(MTISIMDArgumentEncoder) public class MTISIMDArgumentEncoder: NSObject, MTIFunctionArgumentEncoding {

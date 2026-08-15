@@ -4,11 +4,11 @@ import PackageDescription
 let package = Package(
     name: "SwiftClient",
     platforms: [.macOS(.v13)],
-    dependencies: [.package(name: "MetalPetal", path: "../../..")],
+    dependencies: [.package(name: "Raster", path: "../../..")],
     targets: [
         .executableTarget(
             name: "SwiftClient",
-            dependencies: [.product(name: "MetalPetal", package: "MetalPetal")]
+            dependencies: [.product(name: "Raster", package: "Raster")]
         )
     ]
 )
