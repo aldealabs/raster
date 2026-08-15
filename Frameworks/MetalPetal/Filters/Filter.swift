@@ -413,7 +413,9 @@ extension MTIImage: OutputPortProvider {
 infix operator =>: AdditionPrecedence
 
 extension OutputPort where Value == MTIImage? {
-    fileprivate func connect<Input>(to port: Input) where Input: InputPort, Input.Value == Self.Value {
+    public func connect<Input>(
+        to port: Input
+    ) where Input: InputPort, Input.Value == Self.Value {
         let connection = FilterGraph.Connection<Self, Input>(from: self, to: port)
         PortConnectionsBuildingContext.add(connection: connection)
     }
