@@ -7,7 +7,7 @@ export function Footer() {
         <p className="text-center text-xs font-normal text-muted">Raster · © Aldea Labs, {year}</p>
         <div className="flex gap-5 text-xs text-dim">
           <a href="https://github.com/aldealabs/raster" className="hover:text-foreground">GitHub</a>
-          <a href="https://github.com/aldealabs/raster/blob/main/LICENSE" className="hover:text-foreground">MIT License</a>
+          <a href="https://github.com/aldealabs/raster/blob/HEAD/LICENSE" className="hover:text-foreground">MIT License</a>
         </div>
       </div>
     </footer>
