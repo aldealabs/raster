@@ -1,0 +1,10 @@
+{
+  "name": "raster",
+  "private": true,
+  "scripts": {
+    "deploy": "bun --cwd=docs run build && wrangler pages deploy docs/out --project-name raster-docs --branch master"
+  },
+  "devDependencies": {
+    "wrangler": "4.123.0"
+  }
+}
