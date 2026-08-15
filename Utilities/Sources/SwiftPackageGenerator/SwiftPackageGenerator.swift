@@ -39,12 +39,15 @@ public struct SwiftPackageGenerator: ParsableCommand {
         let swiftTargetDirectory = packageSourcesDirectory.appendingPathComponent("MetalPetal/")
         let objectiveCTargetDirectory = packageSourcesDirectory.appendingPathComponent("MetalPetalObjectiveC/")
         let objectiveCHeaderDirectory = packageSourcesDirectory.appendingPathComponent("MetalPetalObjectiveC/include/")
+        let objectiveCNamespacedHeaderDirectory = objectiveCHeaderDirectory.appendingPathComponent("MetalPetal/")
         try fileManager.createDirectory(at: swiftTargetDirectory, withIntermediateDirectories: true, attributes: nil)
         try fileManager.createDirectory(at: objectiveCTargetDirectory, withIntermediateDirectories: true, attributes: nil)
         try fileManager.createDirectory(at: objectiveCHeaderDirectory, withIntermediateDirectories: true, attributes: nil)
+        try fileManager.createDirectory(at: objectiveCNamespacedHeaderDirectory, withIntermediateDirectories: true, attributes: nil)
         
         let fileHandlers = [
             SourceFileHandler(fileTypes: ["h"], projectRoot: projectRoot, targetURL: objectiveCHeaderDirectory, fileManager: fileManager),
+            SourceFileHandler(fileTypes: ["h"], projectRoot: projectRoot, targetURL: objectiveCNamespacedHeaderDirectory, fileManager: fileManager),
             SourceFileHandler(fileTypes: ["m", "mm"], projectRoot: projectRoot, targetURL: objectiveCTargetDirectory, fileManager: fileManager),
             SourceFileHandler(fileTypes: ["swift"], projectRoot: projectRoot, targetURL: swiftTargetDirectory, fileManager: fileManager)
         ]

@@ -23,7 +23,7 @@ extension MTIImage {
     }
     
     @available(*, deprecated, message: "Use init?(contentsOf:options:isOpaque:) instead.")
-    public convenience init?(contentsOf url: URL, options: MTICGImageLoadingOptions = .default, alphaType: MTIAlphaType? = nil) {
+    public convenience init?(contentsOf url: URL, options: MTICGImageLoadingOptions = .default, alphaType: MTIAlphaType?) {
         self.init(__contentsOf: url, loadingOptions: options, isOpaque: alphaType == .alphaIsOne ? true : false)
     }
     
@@ -180,7 +180,7 @@ extension MTIImage {
             let format = UIGraphicsImageRendererFormat.preferred()
             format.opaque = isOpaque
             format.scale = image.scale
-            cgImage = UIGraphicsImageRenderer(size: image.size).image { _ in
+            cgImage = UIGraphicsImageRenderer(size: image.size, format: format).image { _ in
                 image.draw(at: .zero)
             }.cgImage!
             orientation = .up
@@ -208,4 +208,3 @@ extension MTIImage {
 }
 
 #endif
-

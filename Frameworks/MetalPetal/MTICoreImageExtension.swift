@@ -35,12 +35,15 @@ public struct MTICoreImageKernel {
         private let filter: ([CIImage]) throws -> CIImage
         
         private let colorSpace: CGColorSpace?
+
+        private let renderRegion: CGRect
         
-        init(inputs: [MTIImage], filter: @escaping ([CIImage]) throws -> CIImage, dimensions: MTITextureDimensions, pixelFormat: MTLPixelFormat, colorSpace: CGColorSpace?, alphaType: MTIAlphaType) {
+        init(inputs: [MTIImage], filter: @escaping ([CIImage]) throws -> CIImage, dimensions: MTITextureDimensions, renderRegion: CGRect, pixelFormat: MTLPixelFormat, colorSpace: CGColorSpace?, alphaType: MTIAlphaType) {
             assert(dimensions.depth == 1)
             self.dependencies = inputs
             self.filter = filter
             self.dimensions = dimensions
+            self.renderRegion = renderRegion
             self.pixelFormat = pixelFormat
             self.colorSpace = colorSpace
             self.alphaType = alphaType
@@ -108,13 +111,23 @@ public struct MTICoreImageKernel {
                 renderDestination.alphaMode = .none
             }
             renderDestination.colorSpace = colorSpace
-            try renderingContext.context.coreImageContext.startTask(toRender: outputCIImage, to: renderDestination)
+            let destinationRect = CGRect(
+                origin: .zero,
+                size: CGSize(width: CGFloat(dimensions.width), height: CGFloat(dimensions.height))
+            )
+            let sourceRect = (renderRegion.isInfinite || renderRegion.isNull) ? destinationRect : renderRegion
+            try renderingContext.context.coreImageContext.startTask(
+                toRender: outputCIImage,
+                from: sourceRect,
+                to: renderDestination,
+                at: .zero
+            )
             return renderTarget
         }
         
         func updatingDependencies(_ dependencies: [MTIImage]) -> Promise {
             assert(dependencies.count == self.dependencies.count)
-            return Promise(inputs: dependencies, filter: filter, dimensions: dimensions, pixelFormat: pixelFormat, colorSpace: colorSpace, alphaType: alphaType)
+            return Promise(inputs: dependencies, filter: filter, dimensions: dimensions, renderRegion: renderRegion, pixelFormat: pixelFormat, colorSpace: colorSpace, alphaType: alphaType)
         }
         
         private(set) lazy var debugInfo: MTIImagePromiseDebugInfo = MTIImagePromiseDebugInfo(promise: self, type: .processor, content: "")
@@ -127,9 +140,30 @@ public struct MTICoreImageKernel {
                              outputDimensions: MTITextureDimensions,
                              outputPixelFormat: MTLPixelFormat = .unspecified,
                              outputAlphaType: MTIAlphaType = .nonPremultiplied) -> MTIImage {
+        let renderRegion = CGRect(
+            origin: .zero,
+            size: CGSize(width: CGFloat(outputDimensions.width), height: CGFloat(outputDimensions.height))
+        )
+        return image(byProcessing: images,
+                     using: filter,
+                     colorSpace: colorSpace,
+                     outputDimensions: outputDimensions,
+                     renderRegion: renderRegion,
+                     outputPixelFormat: outputPixelFormat,
+                     outputAlphaType: outputAlphaType)
+    }
+
+    fileprivate static func image(byProcessing images:[MTIImage],
+                                  using filter: @escaping ([CIImage]) throws -> CIImage,
+                                  colorSpace: CGColorSpace?,
+                                  outputDimensions: MTITextureDimensions,
+                                  renderRegion: CGRect,
+                                  outputPixelFormat: MTLPixelFormat,
+                                  outputAlphaType: MTIAlphaType) -> MTIImage {
         let promise = Promise(inputs: images,
                               filter: filter,
                               dimensions: outputDimensions,
+                              renderRegion: renderRegion,
                               pixelFormat: outputPixelFormat,
                               colorSpace: colorSpace,
                               alphaType: outputAlphaType)
@@ -184,18 +218,39 @@ public final class MTICoreImageUnaryFilter: MTIUnaryFilter {
             return self.inputImage
         }
         let dimensions: MTITextureDimensions
+        let renderRegion: CGRect
         if let outputImageSize = self.outputImageSize {
             dimensions = MTITextureDimensions(cgSize: outputImageSize)
+            renderRegion = CGRect(origin: .zero, size: outputImageSize)
         } else {
             let placeholder = CIImage(color: CIColor()).cropped(to: inputImage.extent)
             filter.setValue(placeholder, forKey: kCIInputImageKey)
             if let output = filter.outputImage {
-                dimensions = MTITextureDimensions(cgSize: output.extent.size)
+                let outputExtent = output.extent
+                if outputExtent.isInfinite || outputExtent.isNull {
+                    dimensions = inputImage.dimensions
+                    renderRegion = CGRect(origin: .zero, size: inputImage.size)
+                } else {
+                    dimensions = MTITextureDimensions(cgSize: outputExtent.size)
+                    renderRegion = outputExtent
+                }
             } else {
                 assertionFailure()
                 dimensions = inputImage.dimensions
+                renderRegion = CGRect(origin: .zero, size: inputImage.size)
             }
         }
-        return MTICoreImageKernel.image(byProcessing: inputImage, using: filter, colorSpace: colorSpace, outputDimensions: dimensions, outputPixelFormat: outputPixelFormat, outputAlphaType: outputAlphaType)
+        return MTICoreImageKernel.image(byProcessing: [inputImage], using: { inputImages in
+            filter.setValue(inputImages[0], forKey: kCIInputImageKey)
+            if let image = filter.outputImage {
+                return image
+            } else {
+                throw MTICoreImageKernel.Error.nilOutput
+            }
+        }, colorSpace: colorSpace,
+           outputDimensions: dimensions,
+           renderRegion: renderRegion,
+           outputPixelFormat: outputPixelFormat,
+           outputAlphaType: outputAlphaType)
     }
 }

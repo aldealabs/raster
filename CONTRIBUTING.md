@@ -1,12 +1,14 @@
 ## Contributing
 
-First off, thank you for considering contributing to MetalPetal.
+MetalPetal 1.x is in maintenance mode. Contributions should address severe security defects, data-corruption defects, or regressions within the existing compatibility contract.
+
+New feature development belongs to Raster 2.x, which begins after the MetalPetal 1.26.0 tag.
+
+Report suspected security vulnerabilities privately according to [SECURITY.md](SECURITY.md); do not disclose them in a public issue.
 
 ### Pull Requests
 
-If you know exactly how to implement the feature being suggested or fix the bug
-being reported, please open a pull request instead of an issue. Pull requests are easier than
-patches or inline code blocks for discussing and merging the changes.
+If you know exactly how to fix an in-scope defect, open a pull request instead of an issue. Pull requests are easier than patches or inline code blocks for discussing and merging changes.
 
 If you can't make the change yourself, please open an issue after making sure
 that one isn't already logged.
@@ -24,7 +26,14 @@ topic), send a pull request.
 
 - Follow the `API Design Guidelines`
 
-- Run [`test.sh`](https://github.com/MetalPetal/MetalPetal/blob/master/test.sh) before sending a pull request.
+- Run the local verification commands appropriate to your change before sending a pull request:
+
+```bash
+swift build
+swift test
+bash test.sh
+bash Scripts/test-integration.sh
+```
 
 ### API Design Guidelines
 

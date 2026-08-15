@@ -1,83 +1,189 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-set -e
-set -u
-set -o pipefail
+set -euo pipefail
 
-BASEDIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
+cd "$repo_root"
+
+simulator_udid() {
+    local platform="$1"
+    xcrun simctl list devices available --json | /usr/bin/jq -r \
+        --arg prefix "com.apple.CoreSimulator.SimRuntime.${platform}-" '
+        [
+          .devices | to_entries[]
+          | select(.key | startswith($prefix))
+          | .key as $runtime
+          | .value[]
+          | select(.isAvailable == true)
+          | {runtime: $runtime, type: .deviceTypeIdentifier, udid: .udid}
+        ]
+        | sort_by(.runtime, .type, .udid)
+        | reverse
+        | .[0].udid // empty
+        '
+}
+
+scratch_root=""
+cleanup() {
+    if [[ -n "$scratch_root" && "$scratch_root" == */metalpetal-test.* ]]; then
+        rm -rf -- "$scratch_root"
+    fi
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+scratch_root="$(mktemp -d "${TMPDIR:-/tmp}/metalpetal-test.XXXXXX")"
+git -C "$repo_root" status --porcelain=v1 -uall > "$scratch_root/status-before"
+git -C "$repo_root" diff --binary --no-ext-diff -- > "$scratch_root/diff-before"
 
 echo "------------------"
-echo "Preparing..."
+echo "Preparing generated sources"
 echo "------------------"
 
-echo "Running boilerplate-generator..."
-swift run --package-path "$BASEDIR/Utilities" main boilerplate-generator "$BASEDIR"
+for pass in 1 2; do
+    echo "Generator pass $pass"
+    swift run --package-path "$repo_root/Utilities" main boilerplate-generator "$repo_root"
+    swift run --package-path "$repo_root/Utilities" main umbrella-header-generator "$repo_root"
+    swift run --package-path "$repo_root/Utilities" main swift-package-generator "$repo_root"
 
-echo "Running umbrella-header-generator..."
-swift run --package-path "$BASEDIR/Utilities" main umbrella-header-generator "$BASEDIR"
-
-echo "Running swift-package-generator..."
-swift run --package-path "$BASEDIR/Utilities" main swift-package-generator "$BASEDIR"
+    git -C "$repo_root" status --porcelain=v1 -uall > "$scratch_root/status-after-$pass"
+    git -C "$repo_root" diff --binary --no-ext-diff -- > "$scratch_root/diff-after-$pass"
+    cmp "$scratch_root/status-before" "$scratch_root/status-after-$pass"
+    cmp "$scratch_root/diff-before" "$scratch_root/diff-after-$pass"
+done
 
 echo "------------------"
-echo "Somke Test (macOS)"
+echo "Bounded optimizer test (macOS)"
+echo "------------------"
+
+xcodebuild test \
+    -workspace . \
+    -scheme MetalPetal \
+    -destination 'platform=macOS' \
+    -destination-timeout 30 \
+    -parallel-testing-enabled NO \
+    -only-testing:MetalPetalTests/RenderTests/testRenderGraphOptimizerCompletesSixtyFourNodeChain \
+    -test-timeouts-enabled YES \
+    -default-test-execution-time-allowance 5 \
+    -maximum-test-execution-time-allowance 5 \
+    -collect-test-diagnostics never \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO
+
+echo "------------------"
+echo "Smoke Test (macOS)"
 echo "------------------"
 
 swift build
 swift test
 
 echo "------------------"
-echo "Somke Test (iOS Simulator)"
+echo "Smoke Test (iOS Simulator)"
 echo "------------------"
 
-if hash xcpretty 2>/dev/null; then
-    xcodebuild build -scheme MetalPetal -destination 'platform=iOS Simulator,name=iPhone 11' -workspace . | xcpretty
-    xcodebuild test -scheme MetalPetal -destination 'platform=iOS Simulator,name=iPhone 11' -workspace . | xcpretty
+ios_udid="$(simulator_udid iOS)"
+if [[ -n "$ios_udid" ]]; then
+    echo "Using iOS Simulator: $ios_udid"
+    xcodebuild build \
+        -workspace . \
+        -scheme MetalPetal \
+        -destination "platform=iOS Simulator,id=$ios_udid" \
+        CODE_SIGNING_ALLOWED=NO \
+        CODE_SIGNING_REQUIRED=NO
+    xcodebuild test \
+        -workspace . \
+        -scheme MetalPetal \
+        -destination "platform=iOS Simulator,id=$ios_udid" \
+        -parallel-testing-enabled NO \
+        CODE_SIGNING_ALLOWED=NO \
+        CODE_SIGNING_REQUIRED=NO
 else
-    xcodebuild build -scheme MetalPetal -destination 'platform=iOS Simulator,name=iPhone 11' -workspace .
-    xcodebuild test -scheme MetalPetal -destination 'platform=iOS Simulator,name=iPhone 11' -workspace .
+    echo "Skipping iOS Simulator: no available iOS simulator is installed."
 fi
 
 echo "------------------"
-echo "Somke Test (macCatalyst)"
+echo "Smoke Test (Mac Catalyst)"
 echo "------------------"
 
-if hash xcpretty 2>/dev/null; then
-    xcodebuild build -scheme MetalPetal -destination 'platform=macOS,variant=Mac Catalyst' -workspace . | xcpretty
-    xcodebuild test -scheme MetalPetal -destination 'platform=macOS,variant=Mac Catalyst' -workspace . | xcpretty
+xcodebuild build \
+    -workspace . \
+    -scheme MetalPetal \
+    -destination 'platform=macOS,variant=Mac Catalyst' \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO
+xcodebuild test \
+    -workspace . \
+    -scheme MetalPetal \
+    -destination 'platform=macOS,variant=Mac Catalyst' \
+    -parallel-testing-enabled NO \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO
+
+echo "------------------"
+echo "Smoke Test (tvOS Simulator)"
+echo "------------------"
+
+tvos_udid="$(simulator_udid tvOS)"
+if [[ -n "$tvos_udid" ]]; then
+    echo "Using tvOS Simulator: $tvos_udid"
+    xcodebuild build \
+        -workspace . \
+        -scheme MetalPetal \
+        -destination "platform=tvOS Simulator,id=$tvos_udid" \
+        CODE_SIGNING_ALLOWED=NO \
+        CODE_SIGNING_REQUIRED=NO
+    xcodebuild test \
+        -workspace . \
+        -scheme MetalPetal \
+        -destination "platform=tvOS Simulator,id=$tvos_udid" \
+        -parallel-testing-enabled NO \
+        CODE_SIGNING_ALLOWED=NO \
+        CODE_SIGNING_REQUIRED=NO
 else
-    xcodebuild build -scheme MetalPetal -destination 'platform=macOS,variant=Mac Catalyst' -workspace .
-    xcodebuild test -scheme MetalPetal -destination 'platform=macOS,variant=Mac Catalyst' -workspace .
-fi
-
-echo "------------------"
-echo "Somke Test (tvOS Simulator)"
-echo "------------------"
-
-if hash xcpretty 2>/dev/null; then
-    xcodebuild build -scheme MetalPetal -destination 'platform=tvOS Simulator,name=Apple TV' -workspace . | xcpretty
-    xcodebuild test -scheme MetalPetal -destination 'platform=tvOS Simulator,name=Apple TV' -workspace . | xcpretty
-else
-    xcodebuild build -scheme MetalPetal -destination 'platform=tvOS Simulator,name=Apple TV' -workspace .
-    xcodebuild test -scheme MetalPetal -destination 'platform=tvOS Simulator,name=Apple TV' -workspace .
+    echo "Skipping tvOS Simulator: no available tvOS simulator is installed."
 fi
 
 echo "------------------"
 echo "Build (iOS Device)"
 echo "------------------"
 
-if hash xcpretty 2>/dev/null; then
-    xcodebuild build -scheme MetalPetal -destination generic/platform=iOS -workspace . | xcpretty
-else
-    xcodebuild build -scheme MetalPetal -destination generic/platform=iOS -workspace .
-fi
+xcodebuild build \
+    -workspace . \
+    -scheme MetalPetal \
+    -destination 'generic/platform=iOS' \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO
 
 echo "------------------"
 echo "Build (tvOS Device)"
 echo "------------------"
 
-if hash xcpretty 2>/dev/null; then
-    xcodebuild build -scheme MetalPetal -destination generic/platform=tvOS -workspace . | xcpretty
+if xcodebuild build \
+    -workspace . \
+    -scheme MetalPetal \
+    -destination 'generic/platform=tvOS' \
+    CODE_SIGNING_ALLOWED=NO \
+    CODE_SIGNING_REQUIRED=NO 2>&1 | tee "$scratch_root/tvos-device-build.log"; then
+    :
 else
-    xcodebuild build -scheme MetalPetal -destination generic/platform=tvOS -workspace .
+    tvos_pipeline_status=("${PIPESTATUS[@]}")
+    tvos_xcode_status="${tvos_pipeline_status[0]}"
+    tvos_tee_status="${tvos_pipeline_status[1]}"
+    if (( tvos_tee_status != 0 )); then
+        exit "$tvos_tee_status"
+    fi
+    if /usr/bin/grep -Eq '\{ platform:tvOS, .*name:Any tvOS Device, error:tvOS [0-9]+(\.[0-9]+)* is not installed\.' \
+        "$scratch_root/tvos-device-build.log"; then
+        tvos_sdk_path="$(xcrun --sdk appletvos --show-sdk-path)"
+        echo "Generic tvOS destination is unavailable because the local Xcode tvOS platform component is not installed."
+        echo "Running the mandatory tvOS package cross-build with SDK: $tvos_sdk_path"
+        swift build \
+            --scratch-path "$scratch_root/tvos-cross-build" \
+            --triple arm64-apple-tvos13.0 \
+            --sdk "$tvos_sdk_path"
+    else
+        exit "$tvos_xcode_status"
+    fi
 fi

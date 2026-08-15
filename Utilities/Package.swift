@@ -20,17 +20,13 @@ let package = Package(
             dependencies: ["ArgumentParser", "SIMDType", "URLExpressibleByArgument", "MetalPetalSourceLocator"]),
         .target(
             name: "UmbrellaHeaderGenerator",
-            dependencies: ["ArgumentParser", "URLExpressibleByArgument", "RunCommand", "MetalPetalSourceLocator"]),
-        .target(
-            name: "PodspecGenerator",
-            dependencies: ["ArgumentParser", "URLExpressibleByArgument", "RunCommand", "MetalPetalSourceLocator"]),
+            dependencies: ["ArgumentParser", "URLExpressibleByArgument", "MetalPetalSourceLocator"]),
         .target(
             name: "URLExpressibleByArgument",
             dependencies: ["ArgumentParser"]),
-        .target(name: "RunCommand"),
         .target(name: "MetalPetalSourceLocator"),
         .target(
             name: "main",
-            dependencies: ["SwiftPackageGenerator", "BoilerplateGenerator", "UmbrellaHeaderGenerator", "PodspecGenerator"])
+            dependencies: ["SwiftPackageGenerator", "BoilerplateGenerator", "UmbrellaHeaderGenerator"])
     ]
 )

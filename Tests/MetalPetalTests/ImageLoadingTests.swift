@@ -11,7 +11,85 @@ import MetalPetalTestHelpers
 import MetalPetalObjectiveC.Extension
 import VideoToolbox
 
+#if canImport(UIKit)
+import UIKit
+#endif
+
 final class ImageLoadingTests: XCTestCase {
+
+    func testURLInitializerOverloadsCompile() {
+        let url = URL(fileURLWithPath: #file)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Fixture/f1.png")
+        XCTAssertNotNil(MTIImage(contentsOf: url))
+        XCTAssertNotNil(MTIImage(contentsOf: url, isOpaque: true))
+        XCTAssertNotNil(MTIImage(contentsOf: url, alphaType: nil))
+        XCTAssertEqual(MTIImage(contentsOf: url, alphaType: .alphaIsOne)?.alphaType, .alphaIsOne)
+    }
+
+    #if canImport(UIKit)
+    func testCIImageBackedUIImagePreservesScaleAndOrientation() throws {
+        let sourceContext = try XCTUnwrap(CGContext(
+            data: nil,
+            width: 8,
+            height: 12,
+            bitsPerComponent: 8,
+            bytesPerRow: 8 * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        sourceContext.setFillColor(UIColor.red.cgColor)
+        sourceContext.fill(CGRect(x: 0, y: 0, width: 4, height: 6))
+        sourceContext.setFillColor(UIColor.green.cgColor)
+        sourceContext.fill(CGRect(x: 4, y: 0, width: 4, height: 6))
+        sourceContext.setFillColor(UIColor.blue.cgColor)
+        sourceContext.fill(CGRect(x: 0, y: 6, width: 4, height: 6))
+        sourceContext.setFillColor(UIColor.yellow.cgColor)
+        sourceContext.fill(CGRect(x: 4, y: 6, width: 4, height: 6))
+
+        let sourceCGImage = try XCTUnwrap(sourceContext.makeImage())
+        let image = UIImage(
+            ciImage: CIImage(cgImage: sourceCGImage),
+            scale: 4,
+            orientation: .rightMirrored
+        )
+        XCTAssertNil(image.cgImage)
+        XCTAssertEqual(image.size, CGSize(width: 3, height: 2))
+
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = true
+        format.scale = 4
+        let referenceCGImage = try XCTUnwrap(
+            UIGraphicsImageRenderer(size: image.size, format: format).image { _ in
+                image.draw(at: .zero)
+            }.cgImage
+        )
+
+        let context = try makeContext()
+        let expected = try context.makeCGImage(
+            from: MTIImage(cgImage: referenceCGImage, isOpaque: true)
+        )
+        let actual = try context.makeCGImage(
+            from: MTIImage(image: image, isOpaque: true)
+        )
+
+        XCTAssertEqual(expected.width, 12)
+        XCTAssertEqual(expected.height, 8)
+        XCTAssertEqual(actual.width, 12)
+        XCTAssertEqual(actual.height, 8)
+        guard actual.width == expected.width, actual.height == expected.height else {
+            return
+        }
+
+        var expectedPixels: [PixelEnumerator.Coordinates: PixelEnumerator.Pixel] = [:]
+        PixelEnumerator.enumeratePixels(in: expected) { pixel, coordinates in
+            expectedPixels[coordinates] = pixel
+        }
+        PixelEnumerator.enumeratePixels(in: actual) { pixel, coordinates in
+            XCTAssertEqual(pixel, expectedPixels[coordinates], "Pixel mismatch at (\(coordinates.x), \(coordinates.y))")
+        }
+    }
+    #endif
     
     func testCVPixelBufferLoading_cvMetalTextureCache() throws {
         var buffer: CVPixelBuffer?

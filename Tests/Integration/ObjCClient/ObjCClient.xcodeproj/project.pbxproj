@@ -1,0 +1,197 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		6B0000000000000000000001 /* main.m in Sources */ = {isa = PBXBuildFile; fileRef = 6B0000000000000000000011 /* main.m */; };
+		6B0000000000000000000002 /* MetalPetal in Frameworks */ = {isa = PBXBuildFile; productRef = 6B0000000000000000000021 /* MetalPetal */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		6B0000000000000000000011 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		6B0000000000000000000012 /* ObjCClient */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ObjCClient; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		6B0000000000000000000031 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B0000000000000000000002 /* MetalPetal in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		6B0000000000000000000041 = {
+			isa = PBXGroup;
+			children = (
+				6B0000000000000000000042 /* Sources */,
+				6B0000000000000000000043 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		6B0000000000000000000042 /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				6B0000000000000000000011 /* main.m */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		6B0000000000000000000043 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				6B0000000000000000000012 /* ObjCClient */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6B0000000000000000000051 /* ObjCClient */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6B0000000000000000000062 /* Build configuration list for PBXNativeTarget "ObjCClient" */;
+			buildPhases = (
+				6B0000000000000000000071 /* Sources */,
+				6B0000000000000000000031 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ObjCClient;
+			packageProductDependencies = (
+				6B0000000000000000000021 /* MetalPetal */,
+			);
+			productName = ObjCClient;
+			productReference = 6B0000000000000000000012 /* ObjCClient */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		6B0000000000000000000052 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					6B0000000000000000000051 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = 6B0000000000000000000061 /* Build configuration list for PBXProject "ObjCClient" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 6B0000000000000000000041;
+			packageReferences = (
+				6B0000000000000000000020 /* XCLocalSwiftPackageReference "../../.." */,
+			);
+			productRefGroup = 6B0000000000000000000043 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				6B0000000000000000000051 /* ObjCClient */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		6B0000000000000000000071 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6B0000000000000000000001 /* main.m in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		6B0000000000000000000081 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		6B0000000000000000000082 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		6B0000000000000000000083 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		6B0000000000000000000084 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		6B0000000000000000000061 /* Build configuration list for PBXProject "ObjCClient" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B0000000000000000000081 /* Debug */,
+				6B0000000000000000000082 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		6B0000000000000000000062 /* Build configuration list for PBXNativeTarget "ObjCClient" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B0000000000000000000083 /* Debug */,
+				6B0000000000000000000084 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		6B0000000000000000000020 /* XCLocalSwiftPackageReference "../../.." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		6B0000000000000000000021 /* MetalPetal */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6B0000000000000000000020 /* XCLocalSwiftPackageReference "../../.." */;
+			productName = MetalPetal;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 6B0000000000000000000052 /* Project object */;
+}

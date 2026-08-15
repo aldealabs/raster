@@ -16,17 +16,19 @@ about: Something isn't working as expected
 
 Replace this paragraph with a short description of the incorrect behavior.
 
+Do not report a suspected vulnerability in a public issue. Follow the private reporting instructions in [`SECURITY.md`](../blob/HEAD/SECURITY.md).
+
 ### Checklist
-- [ ] I've read the [README](https://github.com/MetalPetal/MetalPetal/blob/master/README.md)
-- [ ] If possible, I've reproduced the issue using the `master` branch of this repo
-- [ ] I've searched for [existing GitHub issues](https://github.com/MetalPetal/MetalPetal/issues)
+- [ ] I've read the repository's [`README`](../blob/HEAD/README.md)
+- [ ] If possible, I've reproduced the issue using the default branch of this repository
+- [ ] I've searched this repository's existing GitHub issues
 
 ### Environment
 
  Info                    | Value                               |
 -------------------------|-------------------------------------|
  MetalPetal Version      | e.g. 1.13.0
- Integration Method      | e.g. CocoaPods / SwiftPM
+ Integration Method      | SwiftPM
  Platform & Version      | e.g. iOS 14.0 / macOS 10.15
  Device                  | e.g. MacBook Pro 16' / iPhone X
 

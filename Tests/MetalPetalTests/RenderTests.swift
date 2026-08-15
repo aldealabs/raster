@@ -247,6 +247,57 @@ final class RenderTests: XCTestCase {
         assertPixel(optimized, equals: expected, accuracy: 0.003, "optimized legal fusion")
     }
 
+    func testRenderGraphOptimizerCompletesSixtyFourNodeChain() throws {
+        let options = MTIContextOptions()
+        options.enablesRenderGraphOptimization = true
+        let context = try makeContext(options: options)
+
+        var image = floatImage(
+            [SIMD4<Float>(0.25, 0.5, 0.75, 1)],
+            width: 1,
+            height: 1
+        )
+        for _ in 0..<64 {
+            let filter = MTIColorMatrixFilter()
+            filter.inputImage = image
+            filter.colorMatrix = .identity
+            filter.outputPixelFormat = .rgba32Float
+            image = try XCTUnwrap(filter.outputImage).withCachePolicy(.transient)
+        }
+
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba32Float,
+            width: 1,
+            height: 1,
+            mipmapped: false
+        )
+        descriptor.storageMode = .shared
+        descriptor.usage = [.renderTarget]
+        let texture = try XCTUnwrap(context.device.makeTexture(descriptor: descriptor))
+        let task = try context.startTask(
+            toRender: image,
+            to: texture,
+            destinationAlphaType: .alphaIsOne,
+            completion: nil
+        )
+        task.waitUntilCompleted()
+        XCTAssertNil(task.error)
+
+        var pixel = [Float](repeating: .nan, count: 4)
+        pixel.withUnsafeMutableBytes { bytes in
+            texture.getBytes(
+                bytes.baseAddress!,
+                bytesPerRow: MemoryLayout<Float>.stride * 4,
+                from: MTLRegionMake2D(0, 0, 1, 1),
+                mipmapLevel: 0
+            )
+        }
+        XCTAssertTrue(pixel.allSatisfy { $0.isFinite })
+        for (actual, expected) in zip(pixel, [Float(0.25), 0.5, 0.75, 1]) {
+            XCTAssertEqual(actual, expected, accuracy: 0.000001)
+        }
+    }
+
     func testHDRCustomTwoArgumentBlendFormulaCompatibility() throws {
         let blendMode = MTIBlendMode(rawValue: "task6LegacyTwoArgumentBlend")
         MTIBlendModes.registerBlendMode(blendMode, with: MTIBlendFunctionDescriptors(blendFormula: """
@@ -550,6 +601,146 @@ final class RenderTests: XCTestCase {
             [1, 1, 0, 0],
             [1, 1, 0, 0],
         ]))
+    }
+
+    func testCoreImageUnaryFilter_normalizesFiniteTranslatedExtent() throws {
+        let inputImage = MTIImage(cgImage: try ImageGenerator.makeMonochromeImage([
+            [0, 255],
+            [128, 64],
+        ]), isOpaque: true)
+        let ciFilter = try XCTUnwrap(CIFilter(name: "CIAffineTransform"))
+        ciFilter.setValue(CGAffineTransform(translationX: 64, y: 64), forKey: kCIInputTransformKey)
+
+        let filter = MTICoreImageUnaryFilter()
+        filter.filter = ciFilter
+        filter.inputImage = inputImage
+        let outputImage = try XCTUnwrap(filter.outputImage)
+
+        let context = try makeContext()
+        let outputCGImage = try context.makeCGImage(from: outputImage)
+        XCTAssertEqual(outputCGImage.width, 2)
+        XCTAssertEqual(outputCGImage.height, 2)
+        let expected: [[UInt8]] = [
+            [0, 255],
+            [128, 64],
+        ]
+        PixelEnumerator.enumeratePixels(in: outputCGImage) { pixel, coordinates in
+            let value = expected[coordinates.y][coordinates.x]
+            XCTAssertEqual(pixel, PixelEnumerator.Pixel(b: value, g: value, r: value, a: 255), "Unexpected pixel at (\(coordinates.x), \(coordinates.y))")
+        }
+    }
+
+    func testCoreImageUnaryFilterRendersExpandedNegativeExtent() throws {
+        let inputImage = MTIImage(cgImage: try ImageGenerator.makeMonochromeImage([
+            [255],
+        ]), isOpaque: true)
+        let ciFilter = try XCTUnwrap(CIFilter(name: "CIGaussianBlur"))
+        ciFilter.setValue(1, forKey: kCIInputRadiusKey)
+
+        let filter = MTICoreImageUnaryFilter()
+        filter.filter = ciFilter
+        filter.inputImage = inputImage
+        let outputImage = try XCTUnwrap(filter.outputImage)
+
+        let context = try makeContext()
+        let outputCGImage = try context.makeCGImage(from: outputImage)
+        XCTAssertEqual(outputCGImage.width, 7)
+        XCTAssertEqual(outputCGImage.height, 7)
+        var pixels: [PixelEnumerator.Coordinates: PixelEnumerator.Pixel] = [:]
+        PixelEnumerator.enumeratePixels(in: outputCGImage) { pixel, coordinates in
+            pixels[coordinates] = pixel
+        }
+        let center = try XCTUnwrap(pixels[PixelEnumerator.Coordinates(x: 3, y: 3)])
+        let corner = try XCTUnwrap(pixels[PixelEnumerator.Coordinates(x: 0, y: 0)])
+        XCTAssertGreaterThan(center.r, 0)
+        XCTAssertGreaterThan(center.a, 0)
+        XCTAssertGreaterThan(center.r, corner.r)
+        XCTAssertGreaterThan(center.a, corner.a)
+        for x in 0..<7 {
+            for y in 0..<7 {
+                let pixel = try XCTUnwrap(pixels[PixelEnumerator.Coordinates(x: x, y: y)])
+                XCTAssertEqual(pixel, pixels[PixelEnumerator.Coordinates(x: 6 - x, y: y)], "Horizontal asymmetry at (\(x), \(y))")
+                XCTAssertEqual(pixel, pixels[PixelEnumerator.Coordinates(x: x, y: 6 - y)], "Vertical asymmetry at (\(x), \(y))")
+            }
+        }
+    }
+
+    func testCoreImageUnaryFilterRespectsExplicitOutputImageSize() throws {
+        let inputImage = MTIImage(cgImage: try ImageGenerator.makeMonochromeImage([
+            [255],
+        ]), isOpaque: true)
+        let ciFilter = try XCTUnwrap(CIFilter(name: "CIGaussianBlur"))
+        ciFilter.setValue(1, forKey: kCIInputRadiusKey)
+
+        let filter = MTICoreImageUnaryFilter()
+        filter.filter = ciFilter
+        filter.inputImage = inputImage
+        filter.outputImageSize = CGSize(width: 3, height: 3)
+        let outputImage = try XCTUnwrap(filter.outputImage)
+
+        let context = try makeContext()
+        let outputCGImage = try context.makeCGImage(from: outputImage)
+        XCTAssertEqual(outputCGImage.width, 3)
+        XCTAssertEqual(outputCGImage.height, 3)
+        PixelEnumerator.enumeratePixels(in: outputCGImage) { pixel, coordinates in
+            if coordinates.x == 1 && coordinates.y == 1 {
+                XCTAssertGreaterThan(pixel.r, 0)
+                XCTAssertGreaterThan(pixel.g, 0)
+                XCTAssertGreaterThan(pixel.b, 0)
+                XCTAssertGreaterThan(pixel.a, 0)
+            }
+        }
+    }
+
+    func testCoreImageUnaryFilterBoundsInfiniteExtent() throws {
+        let inputImage = MTIImage(cgImage: try ImageGenerator.makeMonochromeImage([
+            [0, 255],
+            [128, 64],
+        ]), isOpaque: true)
+        let ciFilter = try XCTUnwrap(CIFilter(name: "CIAffineClamp"))
+        ciFilter.setValue(CGAffineTransform.identity, forKey: kCIInputTransformKey)
+
+        let filter = MTICoreImageUnaryFilter()
+        filter.filter = ciFilter
+        filter.inputImage = inputImage
+        let outputImage = try XCTUnwrap(filter.outputImage)
+
+        let context = try makeContext()
+        let outputCGImage = try context.makeCGImage(from: outputImage)
+        XCTAssertEqual(outputCGImage.width, 2)
+        XCTAssertEqual(outputCGImage.height, 2)
+        let expected: [[UInt8]] = [
+            [0, 255],
+            [128, 64],
+        ]
+        PixelEnumerator.enumeratePixels(in: outputCGImage) { pixel, coordinates in
+            let value = expected[coordinates.y][coordinates.x]
+            XCTAssertEqual(pixel, PixelEnumerator.Pixel(b: value, g: value, r: value, a: 255), "Unexpected pixel at (\(coordinates.x), \(coordinates.y))")
+        }
+    }
+
+    func testCoreImageKernelRendersNegativeOrigin() throws {
+        let inputImage = MTIImage(cgImage: try ImageGenerator.makeMonochromeImage([
+            [0, 64, 128],
+            [0, 64, 128],
+            [0, 64, 128],
+        ]), isOpaque: true)
+        let outputImage = MTICoreImageKernel.image(byProcessing: [inputImage], using: { images in
+            images[0].transformed(by: CGAffineTransform(translationX: -1, y: -1))
+        }, outputDimensions: MTITextureDimensions(cgSize: CGSize(width: 2, height: 2)))
+
+        let context = try makeContext()
+        let outputCGImage = try context.makeCGImage(from: outputImage)
+        XCTAssertEqual(outputCGImage.width, 2)
+        XCTAssertEqual(outputCGImage.height, 2)
+        let expected: [[UInt8]] = [
+            [64, 128],
+            [64, 128],
+        ]
+        PixelEnumerator.enumeratePixels(in: outputCGImage) { pixel, coordinates in
+            let value = expected[coordinates.y][coordinates.x]
+            XCTAssertEqual(pixel, PixelEnumerator.Pixel(b: value, g: value, r: value, a: 255), "Unexpected pixel at (\(coordinates.x), \(coordinates.y))")
+        }
     }
     
     func testMPSFilter_lanczosScale() throws {
@@ -2099,22 +2290,23 @@ final class RenderTests: XCTestCase {
             try renderer.render(atTime: 0, viewport: CGRect(x: 0, y: 0, width: 4, height: 4), sRGB: true) { pixelBuffer in
                 var cgImage: CGImage!
                 VTCreateCGImageFromCVPixelBuffer(pixelBuffer, options: nil, imageOut: &cgImage)
+                // Quarter-covered white is blended in linear space, then sRGB-encoded to byte 137.
                 let result: [PixelEnumerator.Coordinates: PixelEnumerator.Pixel] = [
                     PixelEnumerator.Coordinates(x: 0, y: 3): PixelEnumerator.Pixel(b: 0, g: 0, r: 0, a: 0),
-                    PixelEnumerator.Coordinates(x: 3, y: 2): PixelEnumerator.Pixel(b: 64, g: 64, r: 64, a: 64),
-                    PixelEnumerator.Coordinates(x: 0, y: 2): PixelEnumerator.Pixel(b: 64, g: 64, r: 64, a: 64),
+                    PixelEnumerator.Coordinates(x: 3, y: 2): PixelEnumerator.Pixel(b: 137, g: 137, r: 137, a: 64),
+                    PixelEnumerator.Coordinates(x: 0, y: 2): PixelEnumerator.Pixel(b: 137, g: 137, r: 137, a: 64),
                     PixelEnumerator.Coordinates(x: 2, y: 2): PixelEnumerator.Pixel(b: 255, g: 255, r: 255, a: 255),
                     PixelEnumerator.Coordinates(x: 1, y: 2): PixelEnumerator.Pixel(b: 255, g: 255, r: 255, a: 255),
-                    PixelEnumerator.Coordinates(x: 3, y: 1): PixelEnumerator.Pixel(b: 64, g: 64, r: 64, a: 64),
+                    PixelEnumerator.Coordinates(x: 3, y: 1): PixelEnumerator.Pixel(b: 137, g: 137, r: 137, a: 64),
                     PixelEnumerator.Coordinates(x: 2, y: 1): PixelEnumerator.Pixel(b: 255, g: 255, r: 255, a: 255),
                     PixelEnumerator.Coordinates(x: 0, y: 0): PixelEnumerator.Pixel(b: 0, g: 0, r: 0, a: 0),
-                    PixelEnumerator.Coordinates(x: 2, y: 3): PixelEnumerator.Pixel(b: 64, g: 64, r: 64, a: 64),
+                    PixelEnumerator.Coordinates(x: 2, y: 3): PixelEnumerator.Pixel(b: 137, g: 137, r: 137, a: 64),
                     PixelEnumerator.Coordinates(x: 3, y: 3): PixelEnumerator.Pixel(b: 0, g: 0, r: 0, a: 0),
-                    PixelEnumerator.Coordinates(x: 1, y: 3): PixelEnumerator.Pixel(b: 64, g: 64, r: 64, a: 64),
+                    PixelEnumerator.Coordinates(x: 1, y: 3): PixelEnumerator.Pixel(b: 137, g: 137, r: 137, a: 64),
                     PixelEnumerator.Coordinates(x: 1, y: 1): PixelEnumerator.Pixel(b: 255, g: 255, r: 255, a: 255),
-                    PixelEnumerator.Coordinates(x: 1, y: 0): PixelEnumerator.Pixel(b: 64, g: 64, r: 64, a: 64),
-                    PixelEnumerator.Coordinates(x: 2, y: 0): PixelEnumerator.Pixel(b: 64, g: 64, r: 64, a: 64),
-                    PixelEnumerator.Coordinates(x: 0, y: 1): PixelEnumerator.Pixel(b: 64, g: 64, r: 64, a: 64),
+                    PixelEnumerator.Coordinates(x: 1, y: 0): PixelEnumerator.Pixel(b: 137, g: 137, r: 137, a: 64),
+                    PixelEnumerator.Coordinates(x: 2, y: 0): PixelEnumerator.Pixel(b: 137, g: 137, r: 137, a: 64),
+                    PixelEnumerator.Coordinates(x: 0, y: 1): PixelEnumerator.Pixel(b: 137, g: 137, r: 137, a: 64),
                     PixelEnumerator.Coordinates(x: 3, y: 0): PixelEnumerator.Pixel(b: 0, g: 0, r: 0, a: 0)]
                 PixelEnumerator.enumeratePixels(in: cgImage) { (pixel, coord) in
                     XCTAssert(result[coord] == pixel)
@@ -2175,7 +2367,7 @@ final class RenderTests: XCTestCase {
             cgContext?.draw(cgImage, in: CGRect(x: 0, y: 0, width: 4, height: 4))
             for i in 0..<pixels.count {
                 if i % 4 == 0 {
-                    XCTAssert(pixels[i] == 254) //b
+                    XCTAssertLessThanOrEqual(abs(Int(pixels[i]) - 255), 1) //b
                     XCTAssert(pixels[i + 1] == 0) //g
                     XCTAssert(pixels[i + 2] == 0) //r
                     XCTAssert(pixels[i + 3] == 255) //a

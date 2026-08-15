@@ -1,18 +1,26 @@
 # MetalPetal
 
-[![Swift](https://github.com/MetalPetal/MetalPetal/workflows/Swift/badge.svg)](https://github.com/MetalPetal/MetalPetal/actions?query=workflow%3ASwift)
-<br/>
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%2011%2B%20%7C%20tvOS%2013%2B%20%7C%20macOS%2010.13%2B-blue.svg)](#)
-[![Version](https://img.shields.io/github/v/release/MetalPetal/MetalPetal?label=Release)](https://github.com/MetalPetal/MetalPetal/releases)
 <br/>
 [![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-%E2%80%8B%20%E2%9C%94-eee)](#)
 [![Mac Catalyst](https://img.shields.io/badge/Mac%20Catalyst-%E2%80%8B%20%E2%9C%94-eee)](#)
 [![Simulator](https://img.shields.io/badge/Simulator-%E2%80%8B%20%E2%9C%94-eee)](#)
 <br/>
-[![CocoaPods](https://img.shields.io/static/v1?label=CocoaPods&message=%E2%80%8B%20%E2%9C%94&color=eee&logo=CocoaPods&logoColor=white)](#cocoapods)
 [![Swift PM](https://img.shields.io/static/v1?label=Swift%20PM&message=%E2%80%8B%20%E2%9C%94&color=eee&logo=Swift&logoColor=white)](#swift-package-manager)
 
 An image processing framework based on Metal.
+
+MetalPetal 1.26 is an Aldea-maintained compatibility continuation of upstream MetalPetal 1.25.2; it is not a release from the upstream maintainers.
+
+MetalPetal 1.26.0 is the final MetalPetal feature release. Severe security or data-corruption defects may receive a 1.26.x maintenance release, but no further feature releases are planned.
+
+Raster development continues in this repository after the 1.26.0 tag and begins at version 2.0.0.
+
+MetalPetal 1.26.x remains available from this repository under its existing package product and module names:
+
+```swift
+.package(url: "https://github.com/aldealabs/raster.git", from: "1.26.0")
+```
 
 <!-- TOC depthFrom:2 -->
 
@@ -57,9 +65,6 @@ An image processing framework based on Metal.
     - [Working with JavaScript](#working-with-javascript)
     - [Texture Loader](#texture-loader)
 - [Install](#install)
-    - [CocoaPods](#cocoapods)
-        - [Sub-pod `Swift`](#sub-pod-swift)
-        - [Sub-pod `AppleSilicon`](#sub-pod-applesilicon)
     - [Swift Package Manager](#swift-package-manager)
 - [iOS Simulator Support](#ios-simulator-support)
 - [Quick Look Debug Support](#quick-look-debug-support)
@@ -462,9 +467,13 @@ Please refer to the `CameraFilterView.swift` in the example project for more abo
 
 ## Build Custom Filter
 
-If you want to include the `MTIShaderLib.h` in your `.metal` file, you need to add the path of `MTIShaderLib.h` file to the `Metal Compiler - Header Search Paths` (`MTL_HEADER_SEARCH_PATHS`) setting.
+SwiftPM consumers can include MetalPetal's shader helpers directly from downstream Metal source:
 
-For example, if you use CocoaPods you can set the `MTL_HEADER_SEARCH_PATHS` to  `${PODS_CONFIGURATION_BUILD_DIR}/MetalPetal/MetalPetal.framework/Headers` or `${PODS_ROOT}/MetalPetal/Frameworks/MetalPetal/Shaders`. If you use Swift Package Manager, set the `MTL_HEADER_SEARCH_PATHS` to `$(HEADER_SEARCH_PATHS)`
+```metal
+#include <MetalPetal/MTIShaderLib.h>
+```
+
+The package layout provides this namespaced header without an alias or a hard-coded package path. In an Xcode target that compiles downstream `.metal` files, set `MTL_HEADER_SEARCH_PATHS = "$(HEADER_SEARCH_PATHS)"` so the Metal compiler receives SwiftPM's resolved header paths.
 
 ### Shader Function Arguments Encoding
 
@@ -652,16 +661,12 @@ You can create new input sources or fully custom processing units by implementin
 Objective-C
 
 ```
-@import MetalPetal.Extension;
+@import MetalPetalObjectiveC.Extension;
 ```
 
 Swift
 
 ```
-// CocoaPods
-import MetalPetal.Extension
-
-// Swift Package Manager
 import MetalPetalObjectiveC.Extension
 ```
 
@@ -780,40 +785,31 @@ When you use APIs that accept `MTKTextureLoaderOption`, MetalPetal, by default, 
 
 ## Install
 
-### CocoaPods
-
-You can use [CocoaPods](https://cocoapods.org/) to install the latest version.
-
-```
-use_frameworks!
-
-pod 'MetalPetal'
-
-# Required if you are using Swift.
-pod 'MetalPetal/Swift'
-
-# Recommended if you'd like to run MetalPetal on Apple silicon Macs.
-pod 'MetalPetal/AppleSilicon'
-
-```
-
-#### Sub-pod `Swift`
-
-Provides Swift-specific additions and modifications to the Objective-C APIs to improve their mapping into Swift. Highly recommended if you are using Swift.
-
-#### Sub-pod `AppleSilicon`
-
-Provides the default shader library compiled in Metal Shading Language v2.3 which is required for enabling programmable blending support on Apple silicon Macs.
-
 ### Swift Package Manager
 
-[Adding Package Dependencies to Your App](https://developer.apple.com/documentation/xcode/adding_package_dependencies_to_your_app)
+SwiftPM is the sole supported package manager from MetalPetal 1.26.0 onward. Add `https://github.com/aldealabs/raster.git` as a package dependency in Xcode and select the `MetalPetal` product, or use the dependency declaration above. MetalPetal remains on the 1.26.x version line; Raster begins at 2.0.0, so a SwiftPM dependency starting at 1.26.0 cannot cross the package rename.
+
+The verified consumption interfaces are:
+
+```swift
+import MetalPetal
+```
+
+```objective-c
+#import <MetalPetal/MetalPetal.h>
+```
+
+```metal
+#include <MetalPetal/MTIShaderLib.h>
+```
+
+The downstream Swift and Objective-C integration fixtures resolve these interfaces directly. The Metal fixture uses the standard `MTL_HEADER_SEARCH_PATHS = "$(HEADER_SEARCH_PATHS)"` forwarding setting described above; it needs no header alias or hard-coded package path.
 
 ## iOS Simulator Support
 
 MetalPetal can run on Simulator with Xcode 11+ and macOS 10.15+.
 
-`MetalPerformanceShaders.framework` is not available on Simulator, so filters that rely on `MetalPerformanceShaders`, such as `MTIMPSGaussianBlurFilter`, `MTICLAHEFilter`, do not work.
+Simulator capabilities depend on the host hardware, runtime, and Xcode version. MetalPetal 1.26.0's Xcode 26.3 validation on Apple silicon exercised MPS-backed filters, including `MTICLAHEFilter`, in iOS Simulator.
 
 Simulator supports fewer features or different implementation limits than an actual Apple GPU. See [Developing Metal Apps that Run in Simulator](https://developer.apple.com/documentation/metal/developing_metal_apps_that_run_in_simulator) for detail.
 

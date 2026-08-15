@@ -1,94 +1,247 @@
-name: Swift
+name: SwiftPM
 
 on:
   push:
-    branches: [ master ]
   pull_request:
-    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  target_macOS:
-
-    name: Smoke Test (macOS)
-    
-    runs-on: macos-latest
-
+  generator-drift:
+    runs-on: macos-26
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
-    - uses: actions/checkout@v3
-    - name: Select Xcode
-      run: sudo xcode-select --switch "$(find /Applications -mindepth 1 -maxdepth 1 ! -type l | grep "Xcode_[\.0-9]*app" | sort -V | tail -1)/Contents/Developer"
-    - name: Build
-      run: swift build -v
-    - name: Run tests
-      run: swift test -v
+      - name: Print toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Verify generators are drift-free
+        run: |
+          set -euo pipefail
+          for pass in 1 2; do
+            swift run --package-path Utilities main boilerplate-generator .
+            swift run --package-path Utilities main umbrella-header-generator .
+            swift run --package-path Utilities main swift-package-generator .
+            git diff --exit-code
+            generator_status="$(git status --porcelain=v1 -uall)"
+            test -z "$generator_status"
+          done
 
-  target_iOS_simulator:
-
-    name: Smoke Test (iOS Simulator)
-    
-    runs-on: macos-latest
-
+  macos-tests:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
-    - uses: actions/checkout@v3
-    - name: Select Xcode
-      run: sudo xcode-select --switch "$(find /Applications -mindepth 1 -maxdepth 1 ! -type l | grep "Xcode_[\.0-9]*app" | sort -V | tail -1)/Contents/Developer"
-    - name: Build
-      run: xcodebuild build -scheme MetalPetal -destination 'platform=iOS Simulator,name=iPhone 11' -workspace .
-    - name: Run tests
-      run: xcodebuild test -scheme MetalPetal -destination 'platform=iOS Simulator,name=iPhone 11' -workspace .
+      - name: Print toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Build Swift package
+        run: swift build
+      - name: Run bounded optimizer regression
+        run: |
+          xcodebuild test \
+            -workspace . \
+            -scheme MetalPetal \
+            -destination 'platform=macOS' \
+            -destination-timeout 30 \
+            -parallel-testing-enabled NO \
+            -only-testing:MetalPetalTests/RenderTests/testRenderGraphOptimizerCompletesSixtyFourNodeChain \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 5 \
+            -maximum-test-execution-time-allowance 5 \
+            -collect-test-diagnostics never \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+      - name: Test Swift package
+        run: swift test
 
-  target_tvOS_simulator:
-
-    name: Smoke Test (tvOS Simulator)
-    
-    runs-on: macos-latest
-
+  ios-simulator:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
-    - uses: actions/checkout@v3
-    - name: Select Xcode
-      run: sudo xcode-select --switch "$(find /Applications -mindepth 1 -maxdepth 1 ! -type l | grep "Xcode_[\.0-9]*app" | sort -V | tail -1)/Contents/Developer"
-    - name: Build
-      run: xcodebuild build -scheme MetalPetal -destination 'platform=tvOS Simulator,name=Apple TV' -workspace .
-    - name: Run tests
-      run: xcodebuild test -scheme MetalPetal -destination 'platform=tvOS Simulator,name=Apple TV' -workspace .
+      - name: Print toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Build and test iOS Simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          simulator_udid() {
+              local platform="$1"
+              xcrun simctl list devices available --json | /usr/bin/jq -er \
+                  --arg prefix "com.apple.CoreSimulator.SimRuntime.${platform}-" '
+                  [
+                    .devices | to_entries[]
+                    | select(.key | startswith($prefix))
+                    | .key as $runtime
+                    | .value[]
+                    | select(.isAvailable == true)
+                    | {runtime: $runtime, type: .deviceTypeIdentifier, udid: .udid}
+                  ]
+                  | sort_by(.runtime, .type, .udid)
+                  | reverse
+                  | .[0].udid
+                  '
+          }
+          if ! ios_udid="$(simulator_udid iOS)" || [[ -z "$ios_udid" ]]; then
+              echo "No available iOS simulator is installed." >&2
+              exit 1
+          fi
+          echo "Using iOS Simulator: $ios_udid"
+          xcodebuild build \
+            -workspace . \
+            -scheme MetalPetal \
+            -destination "platform=iOS Simulator,id=$ios_udid" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+          xcodebuild test \
+            -workspace . \
+            -scheme MetalPetal \
+            -destination "platform=iOS Simulator,id=$ios_udid" \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
 
-  target_iOS_device:
-
-    name: Build (iOS Device)
-    
-    runs-on: macos-latest
-
+  tvos-simulator:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
-    - uses: actions/checkout@v3
-    - name: Select Xcode
-      run: sudo xcode-select --switch "$(find /Applications -mindepth 1 -maxdepth 1 ! -type l | grep "Xcode_[\.0-9]*app" | sort -V | tail -1)/Contents/Developer"
-    - name: Build
-      run: xcodebuild build -scheme MetalPetal -destination generic/platform=iOS -workspace .
+      - name: Print toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Build and test tvOS Simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          simulator_udid() {
+              local platform="$1"
+              xcrun simctl list devices available --json | /usr/bin/jq -er \
+                  --arg prefix "com.apple.CoreSimulator.SimRuntime.${platform}-" '
+                  [
+                    .devices | to_entries[]
+                    | select(.key | startswith($prefix))
+                    | .key as $runtime
+                    | .value[]
+                    | select(.isAvailable == true)
+                    | {runtime: $runtime, type: .deviceTypeIdentifier, udid: .udid}
+                  ]
+                  | sort_by(.runtime, .type, .udid)
+                  | reverse
+                  | .[0].udid
+                  '
+          }
+          if ! tvos_udid="$(simulator_udid tvOS)" || [[ -z "$tvos_udid" ]]; then
+              echo "No available tvOS simulator is installed." >&2
+              exit 1
+          fi
+          echo "Using tvOS Simulator: $tvos_udid"
+          xcodebuild build \
+            -workspace . \
+            -scheme MetalPetal \
+            -destination "platform=tvOS Simulator,id=$tvos_udid" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+          xcodebuild test \
+            -workspace . \
+            -scheme MetalPetal \
+            -destination "platform=tvOS Simulator,id=$tvos_udid" \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
 
-  target_tvOS_device:
-
-    name: Build (tvOS Device)
-    
-    runs-on: macos-latest
-
+  catalyst:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
-    - uses: actions/checkout@v3
-    - name: Select Xcode
-      run: sudo xcode-select --switch "$(find /Applications -mindepth 1 -maxdepth 1 ! -type l | grep "Xcode_[\.0-9]*app" | sort -V | tail -1)/Contents/Developer"
-    - name: Build
-      run: xcodebuild build -scheme MetalPetal -destination generic/platform=tvOS -workspace .
+      - name: Print toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Build Mac Catalyst
+        run: |
+          xcodebuild build \
+            -workspace . \
+            -scheme MetalPetal \
+            -destination 'platform=macOS,variant=Mac Catalyst' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+      - name: Test Mac Catalyst
+        run: |
+          xcodebuild test \
+            -workspace . \
+            -scheme MetalPetal \
+            -destination 'platform=macOS,variant=Mac Catalyst' \
+            -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
 
-  target_macCatalyst:
-
-    name: Smoke Test (macCatalyst)
-    
-    runs-on: macos-latest
-
+  device-builds:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
-    - uses: actions/checkout@v3
-    - name: Select Xcode
-      run: sudo xcode-select --switch "$(find /Applications -mindepth 1 -maxdepth 1 ! -type l | grep "Xcode_[\.0-9]*app" | sort -V | tail -1)/Contents/Developer"
-    - name: Build
-      run: xcodebuild build -scheme MetalPetal -destination 'platform=macOS,variant=Mac Catalyst' -workspace .
-    - name: Run tests
-      run: xcodebuild test -scheme MetalPetal -destination 'platform=macOS,variant=Mac Catalyst' -workspace .
+      - name: Print toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Build generic iOS and tvOS devices
+        run: |
+          xcodebuild build \
+            -workspace . \
+            -scheme MetalPetal \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+          xcodebuild build \
+            -workspace . \
+            -scheme MetalPetal \
+            -destination 'generic/platform=tvOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+  integration-consumers:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - name: Print toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Test integration consumers
+        run: bash Scripts/test-integration.sh
+
+  current-xcode:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Print toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Build and test with runner-default Xcode
+        run: swift build && swift test

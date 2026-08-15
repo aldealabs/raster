@@ -1,0 +1,1 @@
+../../../../Frameworks/MetalPetal/MTIWeakToStrongObjectsMapTable.h
