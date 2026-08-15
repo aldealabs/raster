@@ -115,6 +115,7 @@
         NSParameterAssert([MTIBlendModes.allModes containsObject:mode]);
         _blendMode = [mode copy];
         _intensity = 1.0;
+        _headroom = 1.0;
         _outputAlphaType = MTIAlphaTypeNonPremultiplied;
     }
     return self;
@@ -129,7 +130,8 @@
                                                           sourceAlphaType:_inputImage.alphaType
                                                           outputAlphaType:_outputAlphaType];
     return [kernel applyToInputImages:@[_inputBackgroundImage, _inputImage]
-                           parameters:@{@"intensity": @(_intensity)}
+                           parameters:@{@"intensity": @(_intensity),
+                                        @"headroom": @(MAX(_headroom, 1.0f))}
               outputTextureDimensions:MTITextureDimensionsMake2DFromCGSize(_inputBackgroundImage.size)
                     outputPixelFormat:_outputPixelFormat];
 }

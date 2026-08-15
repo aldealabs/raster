@@ -81,7 +81,7 @@ fragment float4 multilayerCompositeNormalBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return normalBlend(currentColor,textureColor);
+    return normalBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -135,7 +135,7 @@ fragment float4 multilayerCompositeNormalBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return normalBlend(backgroundColor,textureColor);
+    return normalBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -189,7 +189,7 @@ fragment float4 multilayerCompositeDarkenBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return darkenBlend(currentColor,textureColor);
+    return darkenBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -243,7 +243,7 @@ fragment float4 multilayerCompositeDarkenBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return darkenBlend(backgroundColor,textureColor);
+    return darkenBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -297,7 +297,7 @@ fragment float4 multilayerCompositeMultiplyBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return multiplyBlend(currentColor,textureColor);
+    return multiplyBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -351,7 +351,7 @@ fragment float4 multilayerCompositeMultiplyBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return multiplyBlend(backgroundColor,textureColor);
+    return multiplyBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -405,7 +405,7 @@ fragment float4 multilayerCompositeColorBurnBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorBurnBlend(currentColor,textureColor);
+    return colorBurnBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -459,7 +459,7 @@ fragment float4 multilayerCompositeColorBurnBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorBurnBlend(backgroundColor,textureColor);
+    return colorBurnBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -513,7 +513,7 @@ fragment float4 multilayerCompositeLinearBurnBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return linearBurnBlend(currentColor,textureColor);
+    return linearBurnBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -567,7 +567,7 @@ fragment float4 multilayerCompositeLinearBurnBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return linearBurnBlend(backgroundColor,textureColor);
+    return linearBurnBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -621,7 +621,7 @@ fragment float4 multilayerCompositeDarkerColorBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return darkerColorBlend(currentColor,textureColor);
+    return darkerColorBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -675,7 +675,7 @@ fragment float4 multilayerCompositeDarkerColorBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return darkerColorBlend(backgroundColor,textureColor);
+    return darkerColorBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -729,7 +729,7 @@ fragment float4 multilayerCompositeLightenBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return lightenBlend(currentColor,textureColor);
+    return lightenBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -783,7 +783,7 @@ fragment float4 multilayerCompositeLightenBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return lightenBlend(backgroundColor,textureColor);
+    return lightenBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -837,7 +837,7 @@ fragment float4 multilayerCompositeScreenBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return screenBlend(currentColor,textureColor);
+    return screenBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -891,7 +891,7 @@ fragment float4 multilayerCompositeScreenBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return screenBlend(backgroundColor,textureColor);
+    return screenBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -945,7 +945,7 @@ fragment float4 multilayerCompositeColorDodgeBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorDodgeBlend(currentColor,textureColor);
+    return colorDodgeBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -999,7 +999,7 @@ fragment float4 multilayerCompositeColorDodgeBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorDodgeBlend(backgroundColor,textureColor);
+    return colorDodgeBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -1053,7 +1053,7 @@ fragment float4 multilayerCompositeAddBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return addBlend(currentColor,textureColor);
+    return addBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -1107,7 +1107,7 @@ fragment float4 multilayerCompositeAddBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return addBlend(backgroundColor,textureColor);
+    return addBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -1161,7 +1161,7 @@ fragment float4 multilayerCompositeLighterColorBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return lighterColorBlend(currentColor,textureColor);
+    return lighterColorBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -1215,7 +1215,7 @@ fragment float4 multilayerCompositeLighterColorBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return lighterColorBlend(backgroundColor,textureColor);
+    return lighterColorBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -1269,7 +1269,7 @@ fragment float4 multilayerCompositeOverlayBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return overlayBlend(currentColor,textureColor);
+    return overlayBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -1323,7 +1323,7 @@ fragment float4 multilayerCompositeOverlayBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return overlayBlend(backgroundColor,textureColor);
+    return overlayBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -1377,7 +1377,7 @@ fragment float4 multilayerCompositeSoftLightBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return softLightBlend(currentColor,textureColor);
+    return softLightBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -1431,7 +1431,7 @@ fragment float4 multilayerCompositeSoftLightBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return softLightBlend(backgroundColor,textureColor);
+    return softLightBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -1485,7 +1485,7 @@ fragment float4 multilayerCompositeHardLightBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hardLightBlend(currentColor,textureColor);
+    return hardLightBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -1539,7 +1539,7 @@ fragment float4 multilayerCompositeHardLightBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hardLightBlend(backgroundColor,textureColor);
+    return hardLightBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -1593,7 +1593,7 @@ fragment float4 multilayerCompositeVividLightBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return vividLightBlend(currentColor,textureColor);
+    return vividLightBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -1647,7 +1647,7 @@ fragment float4 multilayerCompositeVividLightBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return vividLightBlend(backgroundColor,textureColor);
+    return vividLightBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -1701,7 +1701,7 @@ fragment float4 multilayerCompositeLinearLightBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return linearLightBlend(currentColor,textureColor);
+    return linearLightBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -1755,7 +1755,7 @@ fragment float4 multilayerCompositeLinearLightBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return linearLightBlend(backgroundColor,textureColor);
+    return linearLightBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -1809,7 +1809,7 @@ fragment float4 multilayerCompositePinLightBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return pinLightBlend(currentColor,textureColor);
+    return pinLightBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -1863,7 +1863,7 @@ fragment float4 multilayerCompositePinLightBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return pinLightBlend(backgroundColor,textureColor);
+    return pinLightBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -1917,7 +1917,7 @@ fragment float4 multilayerCompositeHardMixBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hardMixBlend(currentColor,textureColor);
+    return hardMixBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -1971,7 +1971,7 @@ fragment float4 multilayerCompositeHardMixBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hardMixBlend(backgroundColor,textureColor);
+    return hardMixBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2025,7 +2025,7 @@ fragment float4 multilayerCompositeDifferenceBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return differenceBlend(currentColor,textureColor);
+    return differenceBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2079,7 +2079,7 @@ fragment float4 multilayerCompositeDifferenceBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return differenceBlend(backgroundColor,textureColor);
+    return differenceBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2133,7 +2133,7 @@ fragment float4 multilayerCompositeExclusionBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return exclusionBlend(currentColor,textureColor);
+    return exclusionBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2187,7 +2187,7 @@ fragment float4 multilayerCompositeExclusionBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return exclusionBlend(backgroundColor,textureColor);
+    return exclusionBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2241,7 +2241,7 @@ fragment float4 multilayerCompositeSubtractBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return subtractBlend(currentColor,textureColor);
+    return subtractBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2295,7 +2295,7 @@ fragment float4 multilayerCompositeSubtractBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return subtractBlend(backgroundColor,textureColor);
+    return subtractBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2349,7 +2349,7 @@ fragment float4 multilayerCompositeDivideBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return divideBlend(currentColor,textureColor);
+    return divideBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2403,7 +2403,7 @@ fragment float4 multilayerCompositeDivideBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return divideBlend(backgroundColor,textureColor);
+    return divideBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2457,7 +2457,7 @@ fragment float4 multilayerCompositeHueBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hueBlend(currentColor,textureColor);
+    return hueBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2511,7 +2511,7 @@ fragment float4 multilayerCompositeHueBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hueBlend(backgroundColor,textureColor);
+    return hueBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2565,7 +2565,7 @@ fragment float4 multilayerCompositeSaturationBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return saturationBlend(currentColor,textureColor);
+    return saturationBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2619,7 +2619,7 @@ fragment float4 multilayerCompositeSaturationBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return saturationBlend(backgroundColor,textureColor);
+    return saturationBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2673,7 +2673,7 @@ fragment float4 multilayerCompositeColorBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorBlend(currentColor,textureColor);
+    return colorBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2727,7 +2727,7 @@ fragment float4 multilayerCompositeColorBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorBlend(backgroundColor,textureColor);
+    return colorBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2781,7 +2781,7 @@ fragment float4 multilayerCompositeLuminosityBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return luminosityBlend(currentColor,textureColor);
+    return luminosityBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2835,7 +2835,7 @@ fragment float4 multilayerCompositeLuminosityBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return luminosityBlend(backgroundColor,textureColor);
+    return luminosityBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 

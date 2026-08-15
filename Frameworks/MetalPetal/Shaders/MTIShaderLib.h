@@ -43,6 +43,7 @@ struct MTIMultilayerCompositingLayerShadingParameters {
     vector_float2 canvasSize;
     
     float opacity;
+    float headroom;
     
     int maskComponent;
     bool maskHasPremultipliedAlpha;
@@ -255,21 +256,34 @@ namespace metalpetal {
     }
     
     //source over blend
-    METAL_FUNC float4 normalBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 normalBlend(float4 Cb, float4 Cs, float headroom) {
         float4 dst = premultiply(Cb);
         float4 src = premultiply(Cs);
         return unpremultiply(src + dst * (1.0 - src.a));
     }
 
-    METAL_FUNC float4 blendBaseAlpha(float4 Cb, float4 Cs, float4 B) {
-        float4 Cr = float4((1 - Cb.a) * Cs.rgb + Cb.a * saturate(B.rgb), Cs.a);
+    METAL_FUNC float4 normalBlend(float4 Cb, float4 Cs) {
+        return normalBlend(Cb, Cs, 1.0f);
+    }
+
+    METAL_FUNC float4 blendBaseAlpha(float4 Cb, float4 Cs, float4 B, float headroom) {
+        float upperBound = max(headroom, 1.0f);
+        float4 Cr = float4((1 - Cb.a) * Cs.rgb + Cb.a * clamp(B.rgb, 0.0f, upperBound), Cs.a);
         return normalBlend(Cb, Cr);
+    }
+
+    METAL_FUNC float4 blendBaseAlpha(float4 Cb, float4 Cs, float4 B) {
+        return blendBaseAlpha(Cb, Cs, B, 1.0f);
     }
     
     // multiply
+    METAL_FUNC float4 multiplyBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = float4(Cb.rgb * Cs.rgb, Cs.a);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 multiplyBlend(float4 Cb, float4 Cs) {
-        float4 B = saturate(float4(Cb.rgb * Cs.rgb, Cs.a));
-        return blendBaseAlpha(Cb, Cs, B);
+        return multiplyBlend(Cb, Cs, 1.0f);
     }
     
     // overlay
@@ -277,14 +291,22 @@ namespace metalpetal {
         return b < 0.5f ? (2 * s * b) : (1 - 2 * (1 - b) * (1 - s));
     }
     
-    METAL_FUNC float4 overlayBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 overlayBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B =  float4(overlayBlendSingleChannel(Cb.r, Cs.r), overlayBlendSingleChannel(Cb.g, Cs.g), overlayBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 overlayBlend(float4 Cb, float4 Cs) {
+        return overlayBlend(Cb, Cs, 1.0f);
     }
     
     //hardLight
+    METAL_FUNC float4 hardLightBlend(float4 Cb, float4 Cs, float headroom) {
+        return overlayBlend(Cs, Cb, headroom);
+    }
+
     METAL_FUNC float4 hardLightBlend(float4 Cb, float4 Cs) {
-        return overlayBlend(Cs, Cb);
+        return hardLightBlend(Cb, Cs, 1.0f);
     }
     
      //  softLight
@@ -296,50 +318,74 @@ namespace metalpetal {
         return s < 0.5? (b - (1 - 2 * s) * b * (1 - b)) : (b + (2 * s - 1) * (softLightBlendSingleChannelD(b) - b));
     }
                          
-    METAL_FUNC float4 softLightBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 softLightBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(softLightBlendSingleChannel(Cb.r, Cs.r), softLightBlendSingleChannel(Cb.g, Cs.g), softLightBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 softLightBlend(float4 Cb, float4 Cs) {
+        return softLightBlend(Cb, Cs, 1.0f);
     }
     
     // screen
-    METAL_FUNC float4 screenBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 screenBlend(float4 Cb, float4 Cs, float headroom) {
         float4 White = float4(1.0);
         float4 B = White - ((White - Cs) * (White - Cb));
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 screenBlend(float4 Cb, float4 Cs) {
+        return screenBlend(Cb, Cs, 1.0f);
     }
     
     // darken
-    METAL_FUNC float4 darkenBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 darkenBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(min(Cs.r, Cb.r), min(Cs.g, Cb.g), min(Cs.b, Cb.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 darkenBlend(float4 Cb, float4 Cs) {
+        return darkenBlend(Cb, Cs, 1.0f);
     }
     
     // darkerColor
-    METAL_FUNC float4 darkerColorBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 darkerColorBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B;
         if (lum(Cs) < lum(Cb)) {
             B = Cs;
         } else {
             B = Cb;
         }
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 darkerColorBlend(float4 Cb, float4 Cs) {
+        return darkerColorBlend(Cb, Cs, 1.0f);
     }
     
     // lighten
-    METAL_FUNC float4 lightenBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 lightenBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(max(Cs.r, Cb.r), max(Cs.g, Cb.g), max(Cs.b, Cb.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 lightenBlend(float4 Cb, float4 Cs) {
+        return lightenBlend(Cb, Cs, 1.0f);
     }
     
     // lighterColor
-    METAL_FUNC float4 lighterColorBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 lighterColorBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B;
         if (lum(Cs) > lum(Cb)) {
             B = Cs;
         } else {
             B = Cb;
         }
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 lighterColorBlend(float4 Cb, float4 Cs) {
+        return lighterColorBlend(Cb, Cs, 1.0f);
     }
     
     // colorBurn
@@ -353,24 +399,38 @@ namespace metalpetal {
         }
     }
     
-    METAL_FUNC float4 colorBurnBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 colorBurnBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(colorBurnBlendSingleChannel(Cb.r, Cs.r), colorBurnBlendSingleChannel(Cb.g, Cs.g), colorBurnBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 colorBurnBlend(float4 Cb, float4 Cs) {
+        return colorBurnBlend(Cb, Cs, 1.0f);
     }
     
     // colorDodge
-    METAL_FUNC float colorDodgeBlendSingleChannel(float b, float f) {
+    METAL_FUNC float colorDodgeBlendSingleChannel(float b, float f, float headroom) {
+        float upperBound = max(headroom, 1.0f);
         if (b == 0) {
             return 0;
         } else if (f == 1) {
-            return 1;
+            return upperBound;
         } else {
-            return min(1.0, b / (1 - f));
+            return min(upperBound, b / (1 - f));
         }
     }
+
+    METAL_FUNC float colorDodgeBlendSingleChannel(float b, float f) {
+        return colorDodgeBlendSingleChannel(b, f, 1.0f);
+    }
+
+    METAL_FUNC float4 colorDodgeBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = float4(colorDodgeBlendSingleChannel(Cb.r, Cs.r, headroom), colorDodgeBlendSingleChannel(Cb.g, Cs.g, headroom), colorDodgeBlendSingleChannel(Cb.b, Cs.b, headroom), Cs.a);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 colorDodgeBlend(float4 Cb, float4 Cs) {
-        float4 B = float4(colorDodgeBlendSingleChannel(Cb.r, Cs.r), colorDodgeBlendSingleChannel(Cb.g, Cs.g), colorDodgeBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return colorDodgeBlend(Cb, Cs, 1.0f);
     }
 
     // pinLight
@@ -383,9 +443,13 @@ namespace metalpetal {
         }
     }
     
-    METAL_FUNC float4 pinLightBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 pinLightBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(pinLightBlendSingleChannel(Cb.r, Cs.r), pinLightBlendSingleChannel(Cb.g, Cs.g), pinLightBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 pinLightBlend(float4 Cb, float4 Cs) {
+        return pinLightBlend(Cb, Cs, 1.0f);
     }
     
     // vividLight
@@ -403,9 +467,13 @@ namespace metalpetal {
         }
     }
     
-    METAL_FUNC float4 vividLightBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 vividLightBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(vividLightBlendSingleChannel(Cb.r, Cs.r), vividLightBlendSingleChannel(Cb.g, Cs.g), vividLightBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 vividLightBlend(float4 Cb, float4 Cs) {
+        return vividLightBlend(Cb, Cs, 1.0f);
     }
     
     // hardMix
@@ -419,83 +487,135 @@ namespace metalpetal {
         }
     }
     
-    METAL_FUNC float4 hardMixBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 hardMixBlend(float4 Cb, float4 Cs, float headroom) {
 
         float4 B = float4(hardMixBlendSingleChannel(Cb.r, Cs.r), hardMixBlendSingleChannel(Cb.g, Cs.g), hardMixBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 hardMixBlend(float4 Cb, float4 Cs) {
+        return hardMixBlend(Cb, Cs, 1.0f);
     }
     
     // difference
-    METAL_FUNC float4 differenceBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 differenceBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(abs(Cb.rgb - Cs.rgb), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 differenceBlend(float4 Cb, float4 Cs) {
+        return differenceBlend(Cb, Cs, 1.0f);
     }
     
     // exclusion
-    METAL_FUNC float4 exclusionBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 exclusionBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(Cb.rgb + Cs.rgb - 2 * Cb.rgb * Cs.rgb, Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 exclusionBlend(float4 Cb, float4 Cs) {
+        return exclusionBlend(Cb, Cs, 1.0f);
     }
     
     // divide
-    METAL_FUNC float divideBlendSingleChannel(float b, float f) {
+    METAL_FUNC float divideBlendSingleChannel(float b, float f, float headroom) {
+        float upperBound = max(headroom, 1.0f);
         if (f == 0) {
-            return 1;
+            return upperBound;
         } else {
-            return min(b / f, 1.0);
+            return min(b / f, upperBound);
         }
     }
+
+    METAL_FUNC float divideBlendSingleChannel(float b, float f) {
+        return divideBlendSingleChannel(b, f, 1.0f);
+    }
+
+    METAL_FUNC float4 divideBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = float4(divideBlendSingleChannel(Cb.r, Cs.r, headroom), divideBlendSingleChannel(Cb.g, Cs.g, headroom), divideBlendSingleChannel(Cb.b, Cs.b, headroom), Cs.a);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 divideBlend(float4 Cb, float4 Cs) {
-        float4 B = float4(divideBlendSingleChannel(Cb.r, Cs.r), divideBlendSingleChannel(Cb.g, Cs.g), divideBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return divideBlend(Cb, Cs, 1.0f);
     }
     
     // add also linearDodge
+    METAL_FUNC float4 addBlend(float4 Cb, float4 Cs, float headroom) {
+        float upperBound = max(headroom, 1.0f);
+        float4 B = float4(min(Cb.rgb + Cs.rgb, float3(upperBound)), Cs.a);
+        return blendBaseAlpha(Cb, Cs, B, upperBound);
+    }
+
     METAL_FUNC float4 addBlend(float4 Cb, float4 Cs) {
-        float4 B = min(Cb + Cs, 1.0);
-        return blendBaseAlpha(Cb, Cs, B);
+        return addBlend(Cb, Cs, 1.0f);
     }
     
+    METAL_FUNC float4 linearDodgeBlend(float4 Cb, float4 Cs, float headroom) {
+        return addBlend(Cb, Cs, headroom);
+    }
+
     METAL_FUNC float4 linearDodgeBlend(float4 Cb, float4 Cs) {
-        return addBlend(Cb,Cs);
+        return linearDodgeBlend(Cb, Cs, 1.0f);
     }
     
     // subtract
-    METAL_FUNC float4 subtractBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 subtractBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = Cb - Cs;
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 subtractBlend(float4 Cb, float4 Cs) {
+        return subtractBlend(Cb, Cs, 1.0f);
     }
     
     // linearBurn
-    METAL_FUNC float4 linearBurnBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 linearBurnBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = max(Cb + Cs - 1, 0);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 linearBurnBlend(float4 Cb, float4 Cs) {
+        return linearBurnBlend(Cb, Cs, 1.0f);
     }
 
     //Linear Light
-    METAL_FUNC float4 linearLightBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 linearLightBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B  = Cb + 2.0 * Cs - 1.0;
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 linearLightBlend(float4 Cb, float4 Cs) {
+        return linearLightBlend(Cb, Cs, 1.0f);
     }
     
     //---
     // non-separable blend
-    METAL_FUNC float4 clipColor(float4 C) {
+    METAL_FUNC float4 clipColor(float4 C, float headroom) {
+        float upperBound = max(headroom, 1.0f);
         float l = lum(C);
         float  n = min(C.r, min(C.g, C.b));
         float x = max(C.r, max(C.g, C.b));
         if (n < 0) {
             return float4((l + ((C.rgb - l) * l) / (l - n)), C.a);
         }
-        if (x > 1.) {
-            return float4(l + (((C.rgb - l) * (1. - l)) / (x - l)), C.a);
+        if (x > upperBound) {
+            return float4(l + (((C.rgb - l) * (upperBound - l)) / (x - l)), C.a);
         }
         return C;
     }
+
+    METAL_FUNC float4 clipColor(float4 C) {
+        return clipColor(C, 1.0f);
+    }
     
-    METAL_FUNC float4 setLum(float4 C, float l) {
+    METAL_FUNC float4 setLum(float4 C, float l, float headroom) {
         float d = l - lum(C);
-        return clipColor(float4(C.rgb + d, C.a ));
+        return clipColor(float4(C.rgb + d, C.a), headroom);
+    }
+
+    METAL_FUNC float4 setLum(float4 C, float l) {
+        return setLum(C, l, 1.0f);
     }
     
     METAL_FUNC float sat(float4 C) {
@@ -543,27 +663,43 @@ namespace metalpetal {
     }
     
     // hue
+    METAL_FUNC float4 hueBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = setLum(setSat(Cs, sat(Cb)), lum(Cb), headroom);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 hueBlend(float4 Cb, float4 Cs) {
-        float4 B = setLum(setSat(Cs, sat(Cb)), lum(Cb));
-        return blendBaseAlpha(Cb, Cs, B);
+        return hueBlend(Cb, Cs, 1.0f);
     }
     
     // saturation
+    METAL_FUNC float4 saturationBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = setLum(setSat(Cb, sat(Cs)), lum(Cb), headroom);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 saturationBlend(float4 Cb, float4 Cs) {
-        float4 B = setLum(setSat(Cb, sat(Cs)), lum(Cb));
-        return blendBaseAlpha(Cb, Cs, B);
+        return saturationBlend(Cb, Cs, 1.0f);
     }
     
     // color
+    METAL_FUNC float4 colorBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = setLum(Cs, lum(Cb), headroom);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 colorBlend(float4 Cb, float4 Cs) {
-        float4 B = setLum(Cs, lum(Cb));
-        return blendBaseAlpha(Cb, Cs, B);
+        return colorBlend(Cb, Cs, 1.0f);
     }
     
      // luminosity
+    METAL_FUNC float4 luminosityBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = setLum(Cb, lum(Cs), headroom);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 luminosityBlend(float4 Cb, float4 Cs) {
-        float4 B = setLum(Cb, lum(Cs));
-        return blendBaseAlpha(Cb, Cs, B);
+        return luminosityBlend(Cb, Cs, 1.0f);
     }
     
     // Vibrance

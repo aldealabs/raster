@@ -25,6 +25,7 @@
 - (instancetype)init {
     if (self = [super init]) {
         _rasterSampleCount = 1;
+        _headroom = 1.0;
         _outputAlphaType = MTIAlphaTypeNonPremultiplied;
     }
     return self;
@@ -40,6 +41,7 @@
     return [self.class.kernel applyToBackgroundImage:_inputBackgroundImage
                                               layers:_layers
                                    rasterSampleCount:_rasterSampleCount
+                                            headroom:MAX(_headroom, 1.0f)
                                      outputAlphaType:_outputAlphaType
                              outputTextureDimensions:MTITextureDimensionsMake2DFromCGSize(_inputBackgroundImage.size)
                                    outputPixelFormat:_outputPixelFormat];

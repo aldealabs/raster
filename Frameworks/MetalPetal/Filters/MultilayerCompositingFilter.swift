@@ -202,6 +202,11 @@ public class MultilayerCompositingFilter: MTIFilter {
         get { internalFilter.outputAlphaType }
         set { internalFilter.outputAlphaType = newValue }
     }
+
+    public var headroom: Float {
+        get { internalFilter.headroom }
+        set { internalFilter.headroom = max(newValue, 1) }
+    }
     
     private var _layers: [Layer] = []
     

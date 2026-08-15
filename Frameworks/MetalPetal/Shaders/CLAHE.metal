@@ -14,11 +14,14 @@ namespace metalpetal {
         fragment half CLAHERGB2Lightness(VertexOut vertexIn [[ stage_in ]],
                                 texture2d<half, access::sample> colorTexture [[ texture(0) ]],
                                 sampler colorSampler [[ sampler(0) ]],
-                                constant float2 & scale [[buffer(0)]]
+                                constant float2 & scale [[buffer(0)]],
+                                constant float & headroom [[buffer(1)]]
                                 ) {
             half4 textureColor = colorTexture.sample(colorSampler, vertexIn.textureCoordinate * scale);
-            half3 hsl = rgb2hsl(textureColor.rgb);
-            return hsl.b;
+            float safeHeadroom = max(headroom, 1.0f);
+            float3 normalizedColor = clamp((float3)textureColor.rgb / safeHeadroom, 0.0f, 1.0f);
+            float3 hsl = rgb2hsl(normalizedColor);
+            return half(hsl.b);
         }
 
         kernel void CLAHEGenerateLUT(
@@ -75,12 +78,15 @@ namespace metalpetal {
                                     texture2d<half, access::sample> lutTexture [[texture(1)]],
                                     sampler colorSampler [[sampler(0)]],
                                     sampler lutSamper [[sampler(1)]],
-                                    constant float2 & tileGridSize [[ buffer(0) ]]
+                                    constant float2 & tileGridSize [[ buffer(0) ]],
+                                    constant float & headroom [[ buffer(1) ]]
                                    )
         {
             float2 sourceCoord = vertexIn.textureCoordinate;
             half4 color = sourceTexture.sample(colorSampler,sourceCoord);
-            half3 hslColor = rgb2hsl(color.rgb);
+            float safeHeadroom = max(headroom, 1.0f);
+            half3 normalizedColor = half3(clamp((float3)color.rgb / safeHeadroom, 0.0f, 1.0f));
+            half3 hslColor = rgb2hsl(normalizedColor);
             
             float txf = sourceCoord.x * tileGridSize.x - 0.5;
             
@@ -117,7 +123,9 @@ namespace metalpetal {
             half3 r = half3(hslColor.r, hslColor.g, res);
             
             half3 rgbResult = hsl2rgb(r);
-            return half4(rgbResult, color.a);
+            float3 scaledResult = clamp((float3)rgbResult * safeHeadroom, 0.0f, safeHeadroom);
+            half3 finalColor = half3(scaledResult);
+            return half4(finalColor, color.a);
         }
     }
 }

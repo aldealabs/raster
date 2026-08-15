@@ -28,6 +28,9 @@ __attribute__((objc_subclassing_restricted))
 
 @property (nonatomic) MTICLAHESize tileGridSize;
 
+/// Specifies the maximum color-component value processed by the filter. The default value is `1`.
+@property (nonatomic) float headroom;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -22,6 +22,7 @@
 #import "MTIContext+Internal.h"
 #import "MTIVector+SIMD.h"
 #import "MTIError.h"
+#import "MTIPixelFormat.h"
 #import <MetalPerformanceShaders/MetalPerformanceShaders.h>
 
 NSInteger const MTICLAHEHistogramBinCount = 256;
@@ -230,6 +231,7 @@ __attribute__((objc_subclassing_restricted))
     if (self = [super init]) {
         _clipLimit = 2.0;
         _tileGridSize = MTICLAHESizeMake(8, 8);
+        _headroom = 1.0;
     }
     return self;
 }
@@ -271,6 +273,7 @@ __attribute__((objc_subclassing_restricted))
     if (!self.inputImage) {
         return nil;
     }
+    float headroom = MAX(self.headroom, 1.0f);
     
     MTLSamplerDescriptor *samplerDescriptor = [self.inputImage.samplerDescriptor newMTLSamplerDescriptor];
     samplerDescriptor.sAddressMode = MTLSamplerAddressModeMirrorRepeat;
@@ -285,7 +288,8 @@ __attribute__((objc_subclassing_restricted))
     MTIVector *lightnessImageScale = [MTIVector vectorWithFloat2:(simd_float2){(self.inputImage.size.width + dX)/self.inputImage.size.width, (self.inputImage.size.height + dY)/self.inputImage.size.height}];
     
     MTIImage *lightnessImage = [MTICLAHEFilter.RGB2LightnessKernel applyToInputImages:@[inputImageForLUT]
-                                                                           parameters:@{@"scale": lightnessImageScale}
+                                                                           parameters:@{@"scale": lightnessImageScale,
+                                                                                        @"headroom": @(headroom)}
                                                               outputTextureDimensions:lightnessTextureDimensions
                                                                     outputPixelFormat:MTLPixelFormatR8Unorm];
     MTIImage *lutImage = [[MTIImage alloc] initWithPromise:[[MTICLAHELUTRecipe alloc] initWithKernel:MTICLAHEFilter.LUTGeneratorKernel
@@ -293,10 +297,15 @@ __attribute__((objc_subclassing_restricted))
                                                                                            clipLimit:self.clipLimit
                                                                                         tileGridSize:self.tileGridSize]];
     MTIVector *tileGridSize = [MTIVector vectorWithFloat2:(simd_float2){self.tileGridSize.width, self.tileGridSize.height}];
+    MTLPixelFormat resolvedOutputPixelFormat = self.outputPixelFormat;
+    if (resolvedOutputPixelFormat == MTIPixelFormatUnspecified && headroom > 1.0f) {
+        resolvedOutputPixelFormat = MTLPixelFormatRGBA16Float;
+    }
     MTIImage *outputImage = [MTICLAHEFilter.CLAHELookupKernel applyToInputImages:@[self.inputImage, lutImage]
-                                                                      parameters:@{@"tileGridSize": tileGridSize}
+                                                                      parameters:@{@"tileGridSize": tileGridSize,
+                                                                                   @"headroom": @(headroom)}
                                                          outputTextureDimensions:MTITextureDimensionsMake2DFromCGSize(self.inputImage.size)
-                                                               outputPixelFormat:self.outputPixelFormat];
+                                                               outputPixelFormat:resolvedOutputPixelFormat];
     return outputImage;
 }
 

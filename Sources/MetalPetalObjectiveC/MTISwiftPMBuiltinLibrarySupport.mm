@@ -48,6 +48,7 @@ struct MTIMultilayerCompositingLayerShadingParameters {
     vector_float2 canvasSize;
     
     float opacity;
+    float headroom;
     
     int maskComponent;
     bool maskHasPremultipliedAlpha;
@@ -260,21 +261,34 @@ namespace metalpetal {
     }
     
     //source over blend
-    METAL_FUNC float4 normalBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 normalBlend(float4 Cb, float4 Cs, float headroom) {
         float4 dst = premultiply(Cb);
         float4 src = premultiply(Cs);
         return unpremultiply(src + dst * (1.0 - src.a));
     }
 
-    METAL_FUNC float4 blendBaseAlpha(float4 Cb, float4 Cs, float4 B) {
-        float4 Cr = float4((1 - Cb.a) * Cs.rgb + Cb.a * saturate(B.rgb), Cs.a);
+    METAL_FUNC float4 normalBlend(float4 Cb, float4 Cs) {
+        return normalBlend(Cb, Cs, 1.0f);
+    }
+
+    METAL_FUNC float4 blendBaseAlpha(float4 Cb, float4 Cs, float4 B, float headroom) {
+        float upperBound = max(headroom, 1.0f);
+        float4 Cr = float4((1 - Cb.a) * Cs.rgb + Cb.a * clamp(B.rgb, 0.0f, upperBound), Cs.a);
         return normalBlend(Cb, Cr);
+    }
+
+    METAL_FUNC float4 blendBaseAlpha(float4 Cb, float4 Cs, float4 B) {
+        return blendBaseAlpha(Cb, Cs, B, 1.0f);
     }
     
     // multiply
+    METAL_FUNC float4 multiplyBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = float4(Cb.rgb * Cs.rgb, Cs.a);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 multiplyBlend(float4 Cb, float4 Cs) {
-        float4 B = saturate(float4(Cb.rgb * Cs.rgb, Cs.a));
-        return blendBaseAlpha(Cb, Cs, B);
+        return multiplyBlend(Cb, Cs, 1.0f);
     }
     
     // overlay
@@ -282,14 +296,22 @@ namespace metalpetal {
         return b < 0.5f ? (2 * s * b) : (1 - 2 * (1 - b) * (1 - s));
     }
     
-    METAL_FUNC float4 overlayBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 overlayBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B =  float4(overlayBlendSingleChannel(Cb.r, Cs.r), overlayBlendSingleChannel(Cb.g, Cs.g), overlayBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 overlayBlend(float4 Cb, float4 Cs) {
+        return overlayBlend(Cb, Cs, 1.0f);
     }
     
     //hardLight
+    METAL_FUNC float4 hardLightBlend(float4 Cb, float4 Cs, float headroom) {
+        return overlayBlend(Cs, Cb, headroom);
+    }
+
     METAL_FUNC float4 hardLightBlend(float4 Cb, float4 Cs) {
-        return overlayBlend(Cs, Cb);
+        return hardLightBlend(Cb, Cs, 1.0f);
     }
     
      //  softLight
@@ -301,50 +323,74 @@ namespace metalpetal {
         return s < 0.5? (b - (1 - 2 * s) * b * (1 - b)) : (b + (2 * s - 1) * (softLightBlendSingleChannelD(b) - b));
     }
                          
-    METAL_FUNC float4 softLightBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 softLightBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(softLightBlendSingleChannel(Cb.r, Cs.r), softLightBlendSingleChannel(Cb.g, Cs.g), softLightBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 softLightBlend(float4 Cb, float4 Cs) {
+        return softLightBlend(Cb, Cs, 1.0f);
     }
     
     // screen
-    METAL_FUNC float4 screenBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 screenBlend(float4 Cb, float4 Cs, float headroom) {
         float4 White = float4(1.0);
         float4 B = White - ((White - Cs) * (White - Cb));
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 screenBlend(float4 Cb, float4 Cs) {
+        return screenBlend(Cb, Cs, 1.0f);
     }
     
     // darken
-    METAL_FUNC float4 darkenBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 darkenBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(min(Cs.r, Cb.r), min(Cs.g, Cb.g), min(Cs.b, Cb.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 darkenBlend(float4 Cb, float4 Cs) {
+        return darkenBlend(Cb, Cs, 1.0f);
     }
     
     // darkerColor
-    METAL_FUNC float4 darkerColorBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 darkerColorBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B;
         if (lum(Cs) < lum(Cb)) {
             B = Cs;
         } else {
             B = Cb;
         }
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 darkerColorBlend(float4 Cb, float4 Cs) {
+        return darkerColorBlend(Cb, Cs, 1.0f);
     }
     
     // lighten
-    METAL_FUNC float4 lightenBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 lightenBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(max(Cs.r, Cb.r), max(Cs.g, Cb.g), max(Cs.b, Cb.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 lightenBlend(float4 Cb, float4 Cs) {
+        return lightenBlend(Cb, Cs, 1.0f);
     }
     
     // lighterColor
-    METAL_FUNC float4 lighterColorBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 lighterColorBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B;
         if (lum(Cs) > lum(Cb)) {
             B = Cs;
         } else {
             B = Cb;
         }
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 lighterColorBlend(float4 Cb, float4 Cs) {
+        return lighterColorBlend(Cb, Cs, 1.0f);
     }
     
     // colorBurn
@@ -358,24 +404,38 @@ namespace metalpetal {
         }
     }
     
-    METAL_FUNC float4 colorBurnBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 colorBurnBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(colorBurnBlendSingleChannel(Cb.r, Cs.r), colorBurnBlendSingleChannel(Cb.g, Cs.g), colorBurnBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 colorBurnBlend(float4 Cb, float4 Cs) {
+        return colorBurnBlend(Cb, Cs, 1.0f);
     }
     
     // colorDodge
-    METAL_FUNC float colorDodgeBlendSingleChannel(float b, float f) {
+    METAL_FUNC float colorDodgeBlendSingleChannel(float b, float f, float headroom) {
+        float upperBound = max(headroom, 1.0f);
         if (b == 0) {
             return 0;
         } else if (f == 1) {
-            return 1;
+            return upperBound;
         } else {
-            return min(1.0, b / (1 - f));
+            return min(upperBound, b / (1 - f));
         }
     }
+
+    METAL_FUNC float colorDodgeBlendSingleChannel(float b, float f) {
+        return colorDodgeBlendSingleChannel(b, f, 1.0f);
+    }
+
+    METAL_FUNC float4 colorDodgeBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = float4(colorDodgeBlendSingleChannel(Cb.r, Cs.r, headroom), colorDodgeBlendSingleChannel(Cb.g, Cs.g, headroom), colorDodgeBlendSingleChannel(Cb.b, Cs.b, headroom), Cs.a);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 colorDodgeBlend(float4 Cb, float4 Cs) {
-        float4 B = float4(colorDodgeBlendSingleChannel(Cb.r, Cs.r), colorDodgeBlendSingleChannel(Cb.g, Cs.g), colorDodgeBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return colorDodgeBlend(Cb, Cs, 1.0f);
     }
 
     // pinLight
@@ -388,9 +448,13 @@ namespace metalpetal {
         }
     }
     
-    METAL_FUNC float4 pinLightBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 pinLightBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(pinLightBlendSingleChannel(Cb.r, Cs.r), pinLightBlendSingleChannel(Cb.g, Cs.g), pinLightBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 pinLightBlend(float4 Cb, float4 Cs) {
+        return pinLightBlend(Cb, Cs, 1.0f);
     }
     
     // vividLight
@@ -408,9 +472,13 @@ namespace metalpetal {
         }
     }
     
-    METAL_FUNC float4 vividLightBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 vividLightBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(vividLightBlendSingleChannel(Cb.r, Cs.r), vividLightBlendSingleChannel(Cb.g, Cs.g), vividLightBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 vividLightBlend(float4 Cb, float4 Cs) {
+        return vividLightBlend(Cb, Cs, 1.0f);
     }
     
     // hardMix
@@ -424,83 +492,135 @@ namespace metalpetal {
         }
     }
     
-    METAL_FUNC float4 hardMixBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 hardMixBlend(float4 Cb, float4 Cs, float headroom) {
 
         float4 B = float4(hardMixBlendSingleChannel(Cb.r, Cs.r), hardMixBlendSingleChannel(Cb.g, Cs.g), hardMixBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 hardMixBlend(float4 Cb, float4 Cs) {
+        return hardMixBlend(Cb, Cs, 1.0f);
     }
     
     // difference
-    METAL_FUNC float4 differenceBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 differenceBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(abs(Cb.rgb - Cs.rgb), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 differenceBlend(float4 Cb, float4 Cs) {
+        return differenceBlend(Cb, Cs, 1.0f);
     }
     
     // exclusion
-    METAL_FUNC float4 exclusionBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 exclusionBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = float4(Cb.rgb + Cs.rgb - 2 * Cb.rgb * Cs.rgb, Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 exclusionBlend(float4 Cb, float4 Cs) {
+        return exclusionBlend(Cb, Cs, 1.0f);
     }
     
     // divide
-    METAL_FUNC float divideBlendSingleChannel(float b, float f) {
+    METAL_FUNC float divideBlendSingleChannel(float b, float f, float headroom) {
+        float upperBound = max(headroom, 1.0f);
         if (f == 0) {
-            return 1;
+            return upperBound;
         } else {
-            return min(b / f, 1.0);
+            return min(b / f, upperBound);
         }
     }
+
+    METAL_FUNC float divideBlendSingleChannel(float b, float f) {
+        return divideBlendSingleChannel(b, f, 1.0f);
+    }
+
+    METAL_FUNC float4 divideBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = float4(divideBlendSingleChannel(Cb.r, Cs.r, headroom), divideBlendSingleChannel(Cb.g, Cs.g, headroom), divideBlendSingleChannel(Cb.b, Cs.b, headroom), Cs.a);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 divideBlend(float4 Cb, float4 Cs) {
-        float4 B = float4(divideBlendSingleChannel(Cb.r, Cs.r), divideBlendSingleChannel(Cb.g, Cs.g), divideBlendSingleChannel(Cb.b, Cs.b), Cs.a);
-        return blendBaseAlpha(Cb, Cs, B);
+        return divideBlend(Cb, Cs, 1.0f);
     }
     
     // add also linearDodge
+    METAL_FUNC float4 addBlend(float4 Cb, float4 Cs, float headroom) {
+        float upperBound = max(headroom, 1.0f);
+        float4 B = float4(min(Cb.rgb + Cs.rgb, float3(upperBound)), Cs.a);
+        return blendBaseAlpha(Cb, Cs, B, upperBound);
+    }
+
     METAL_FUNC float4 addBlend(float4 Cb, float4 Cs) {
-        float4 B = min(Cb + Cs, 1.0);
-        return blendBaseAlpha(Cb, Cs, B);
+        return addBlend(Cb, Cs, 1.0f);
     }
     
+    METAL_FUNC float4 linearDodgeBlend(float4 Cb, float4 Cs, float headroom) {
+        return addBlend(Cb, Cs, headroom);
+    }
+
     METAL_FUNC float4 linearDodgeBlend(float4 Cb, float4 Cs) {
-        return addBlend(Cb,Cs);
+        return linearDodgeBlend(Cb, Cs, 1.0f);
     }
     
     // subtract
-    METAL_FUNC float4 subtractBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 subtractBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = Cb - Cs;
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 subtractBlend(float4 Cb, float4 Cs) {
+        return subtractBlend(Cb, Cs, 1.0f);
     }
     
     // linearBurn
-    METAL_FUNC float4 linearBurnBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 linearBurnBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B = max(Cb + Cs - 1, 0);
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 linearBurnBlend(float4 Cb, float4 Cs) {
+        return linearBurnBlend(Cb, Cs, 1.0f);
     }
 
     //Linear Light
-    METAL_FUNC float4 linearLightBlend(float4 Cb, float4 Cs) {
+    METAL_FUNC float4 linearLightBlend(float4 Cb, float4 Cs, float headroom) {
         float4 B  = Cb + 2.0 * Cs - 1.0;
-        return blendBaseAlpha(Cb, Cs, B);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
+    METAL_FUNC float4 linearLightBlend(float4 Cb, float4 Cs) {
+        return linearLightBlend(Cb, Cs, 1.0f);
     }
     
     //---
     // non-separable blend
-    METAL_FUNC float4 clipColor(float4 C) {
+    METAL_FUNC float4 clipColor(float4 C, float headroom) {
+        float upperBound = max(headroom, 1.0f);
         float l = lum(C);
         float  n = min(C.r, min(C.g, C.b));
         float x = max(C.r, max(C.g, C.b));
         if (n < 0) {
             return float4((l + ((C.rgb - l) * l) / (l - n)), C.a);
         }
-        if (x > 1.) {
-            return float4(l + (((C.rgb - l) * (1. - l)) / (x - l)), C.a);
+        if (x > upperBound) {
+            return float4(l + (((C.rgb - l) * (upperBound - l)) / (x - l)), C.a);
         }
         return C;
     }
+
+    METAL_FUNC float4 clipColor(float4 C) {
+        return clipColor(C, 1.0f);
+    }
     
-    METAL_FUNC float4 setLum(float4 C, float l) {
+    METAL_FUNC float4 setLum(float4 C, float l, float headroom) {
         float d = l - lum(C);
-        return clipColor(float4(C.rgb + d, C.a ));
+        return clipColor(float4(C.rgb + d, C.a), headroom);
+    }
+
+    METAL_FUNC float4 setLum(float4 C, float l) {
+        return setLum(C, l, 1.0f);
     }
     
     METAL_FUNC float sat(float4 C) {
@@ -548,27 +668,43 @@ namespace metalpetal {
     }
     
     // hue
+    METAL_FUNC float4 hueBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = setLum(setSat(Cs, sat(Cb)), lum(Cb), headroom);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 hueBlend(float4 Cb, float4 Cs) {
-        float4 B = setLum(setSat(Cs, sat(Cb)), lum(Cb));
-        return blendBaseAlpha(Cb, Cs, B);
+        return hueBlend(Cb, Cs, 1.0f);
     }
     
     // saturation
+    METAL_FUNC float4 saturationBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = setLum(setSat(Cb, sat(Cs)), lum(Cb), headroom);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 saturationBlend(float4 Cb, float4 Cs) {
-        float4 B = setLum(setSat(Cb, sat(Cs)), lum(Cb));
-        return blendBaseAlpha(Cb, Cs, B);
+        return saturationBlend(Cb, Cs, 1.0f);
     }
     
     // color
+    METAL_FUNC float4 colorBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = setLum(Cs, lum(Cb), headroom);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 colorBlend(float4 Cb, float4 Cs) {
-        float4 B = setLum(Cs, lum(Cb));
-        return blendBaseAlpha(Cb, Cs, B);
+        return colorBlend(Cb, Cs, 1.0f);
     }
     
      // luminosity
+    METAL_FUNC float4 luminosityBlend(float4 Cb, float4 Cs, float headroom) {
+        float4 B = setLum(Cb, lum(Cs), headroom);
+        return blendBaseAlpha(Cb, Cs, B, headroom);
+    }
+
     METAL_FUNC float4 luminosityBlend(float4 Cb, float4 Cs) {
-        float4 B = setLum(Cb, lum(Cs));
-        return blendBaseAlpha(Cb, Cs, B);
+        return luminosityBlend(Cb, Cs, 1.0f);
     }
     
     // Vibrance
@@ -848,7 +984,8 @@ fragment float4 normalBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -863,7 +1000,7 @@ fragment float4 normalBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = normalBlend(uCb, uCf);
+    float4 blendedColor = normalBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -880,7 +1017,8 @@ fragment float4 darkenBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -895,7 +1033,7 @@ fragment float4 darkenBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = darkenBlend(uCb, uCf);
+    float4 blendedColor = darkenBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -912,7 +1050,8 @@ fragment float4 multiplyBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -927,7 +1066,7 @@ fragment float4 multiplyBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = multiplyBlend(uCb, uCf);
+    float4 blendedColor = multiplyBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -944,7 +1083,8 @@ fragment float4 colorBurnBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -959,7 +1099,7 @@ fragment float4 colorBurnBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = colorBurnBlend(uCb, uCf);
+    float4 blendedColor = colorBurnBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -976,7 +1116,8 @@ fragment float4 linearBurnBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -991,7 +1132,7 @@ fragment float4 linearBurnBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = linearBurnBlend(uCb, uCf);
+    float4 blendedColor = linearBurnBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1008,7 +1149,8 @@ fragment float4 darkerColorBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1023,7 +1165,7 @@ fragment float4 darkerColorBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = darkerColorBlend(uCb, uCf);
+    float4 blendedColor = darkerColorBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1040,7 +1182,8 @@ fragment float4 lightenBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1055,7 +1198,7 @@ fragment float4 lightenBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = lightenBlend(uCb, uCf);
+    float4 blendedColor = lightenBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1072,7 +1215,8 @@ fragment float4 screenBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1087,7 +1231,7 @@ fragment float4 screenBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = screenBlend(uCb, uCf);
+    float4 blendedColor = screenBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1104,7 +1248,8 @@ fragment float4 colorDodgeBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1119,7 +1264,7 @@ fragment float4 colorDodgeBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = colorDodgeBlend(uCb, uCf);
+    float4 blendedColor = colorDodgeBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1136,7 +1281,8 @@ fragment float4 addBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1151,7 +1297,7 @@ fragment float4 addBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = addBlend(uCb, uCf);
+    float4 blendedColor = addBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1168,7 +1314,8 @@ fragment float4 lighterColorBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1183,7 +1330,7 @@ fragment float4 lighterColorBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = lighterColorBlend(uCb, uCf);
+    float4 blendedColor = lighterColorBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1200,7 +1347,8 @@ fragment float4 overlayBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1215,7 +1363,7 @@ fragment float4 overlayBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = overlayBlend(uCb, uCf);
+    float4 blendedColor = overlayBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1232,7 +1380,8 @@ fragment float4 softLightBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1247,7 +1396,7 @@ fragment float4 softLightBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = softLightBlend(uCb, uCf);
+    float4 blendedColor = softLightBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1264,7 +1413,8 @@ fragment float4 hardLightBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1279,7 +1429,7 @@ fragment float4 hardLightBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = hardLightBlend(uCb, uCf);
+    float4 blendedColor = hardLightBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1296,7 +1446,8 @@ fragment float4 vividLightBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1311,7 +1462,7 @@ fragment float4 vividLightBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = vividLightBlend(uCb, uCf);
+    float4 blendedColor = vividLightBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1328,7 +1479,8 @@ fragment float4 linearLightBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1343,7 +1495,7 @@ fragment float4 linearLightBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = linearLightBlend(uCb, uCf);
+    float4 blendedColor = linearLightBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1360,7 +1512,8 @@ fragment float4 pinLightBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1375,7 +1528,7 @@ fragment float4 pinLightBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = pinLightBlend(uCb, uCf);
+    float4 blendedColor = pinLightBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1392,7 +1545,8 @@ fragment float4 hardMixBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1407,7 +1561,7 @@ fragment float4 hardMixBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = hardMixBlend(uCb, uCf);
+    float4 blendedColor = hardMixBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1424,7 +1578,8 @@ fragment float4 differenceBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1439,7 +1594,7 @@ fragment float4 differenceBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = differenceBlend(uCb, uCf);
+    float4 blendedColor = differenceBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1456,7 +1611,8 @@ fragment float4 exclusionBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1471,7 +1627,7 @@ fragment float4 exclusionBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = exclusionBlend(uCb, uCf);
+    float4 blendedColor = exclusionBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1488,7 +1644,8 @@ fragment float4 subtractBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1503,7 +1660,7 @@ fragment float4 subtractBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = subtractBlend(uCb, uCf);
+    float4 blendedColor = subtractBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1520,7 +1677,8 @@ fragment float4 divideBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1535,7 +1693,7 @@ fragment float4 divideBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = divideBlend(uCb, uCf);
+    float4 blendedColor = divideBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1552,7 +1710,8 @@ fragment float4 hueBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1567,7 +1726,7 @@ fragment float4 hueBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = hueBlend(uCb, uCf);
+    float4 blendedColor = hueBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1584,7 +1743,8 @@ fragment float4 saturationBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1599,7 +1759,7 @@ fragment float4 saturationBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = saturationBlend(uCb, uCf);
+    float4 blendedColor = saturationBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1616,7 +1776,8 @@ fragment float4 colorBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1631,7 +1792,7 @@ fragment float4 colorBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = colorBlend(uCb, uCf);
+    float4 blendedColor = colorBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1648,7 +1809,8 @@ fragment float4 luminosityBlend(VertexOut vertexIn [[ stage_in ]],
                                     sampler colorSampler [[ sampler(0) ]],
                                     texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                     sampler overlaySampler [[ sampler(1) ]],
-                                    constant float &intensity [[buffer(0)]]
+                                    constant float &intensity [[buffer(0)]],
+                                            constant float &headroom [[buffer(1)]]
                                     ) {
     float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
     float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -1663,7 +1825,7 @@ fragment float4 luminosityBlend(VertexOut vertexIn [[ stage_in ]],
     if (blend_filter_source_has_premultiplied_alpha) {
         uCf = unpremultiply(uCf);
     }
-    float4 blendedColor = luminosityBlend(uCb, uCf);
+    float4 blendedColor = luminosityBlend(uCb, uCf, headroom);
     float4 output = mix(uCb,blendedColor,intensity);
     if (blend_filter_outputs_premultiplied_alpha) {
         return premultiply(output);
@@ -1694,11 +1856,14 @@ namespace metalpetal {
         fragment half CLAHERGB2Lightness(VertexOut vertexIn [[ stage_in ]],
                                 texture2d<half, access::sample> colorTexture [[ texture(0) ]],
                                 sampler colorSampler [[ sampler(0) ]],
-                                constant float2 & scale [[buffer(0)]]
+                                constant float2 & scale [[buffer(0)]],
+                                constant float & headroom [[buffer(1)]]
                                 ) {
             half4 textureColor = colorTexture.sample(colorSampler, vertexIn.textureCoordinate * scale);
-            half3 hsl = rgb2hsl(textureColor.rgb);
-            return hsl.b;
+            float safeHeadroom = max(headroom, 1.0f);
+            float3 normalizedColor = clamp((float3)textureColor.rgb / safeHeadroom, 0.0f, 1.0f);
+            float3 hsl = rgb2hsl(normalizedColor);
+            return half(hsl.b);
         }
 
         kernel void CLAHEGenerateLUT(
@@ -1755,12 +1920,15 @@ namespace metalpetal {
                                     texture2d<half, access::sample> lutTexture [[texture(1)]],
                                     sampler colorSampler [[sampler(0)]],
                                     sampler lutSamper [[sampler(1)]],
-                                    constant float2 & tileGridSize [[ buffer(0) ]]
+                                    constant float2 & tileGridSize [[ buffer(0) ]],
+                                    constant float & headroom [[ buffer(1) ]]
                                    )
         {
             float2 sourceCoord = vertexIn.textureCoordinate;
             half4 color = sourceTexture.sample(colorSampler,sourceCoord);
-            half3 hslColor = rgb2hsl(color.rgb);
+            float safeHeadroom = max(headroom, 1.0f);
+            half3 normalizedColor = half3(clamp((float3)color.rgb / safeHeadroom, 0.0f, 1.0f));
+            half3 hslColor = rgb2hsl(normalizedColor);
             
             float txf = sourceCoord.x * tileGridSize.x - 0.5;
             
@@ -1797,7 +1965,9 @@ namespace metalpetal {
             half3 r = half3(hslColor.r, hslColor.g, res);
             
             half3 rgbResult = hsl2rgb(r);
-            return half4(rgbResult, color.a);
+            float3 scaledResult = clamp((float3)rgbResult * safeHeadroom, 0.0f, safeHeadroom);
+            half3 finalColor = half3(scaledResult);
+            return half4(finalColor, color.a);
         }
     }
 }
@@ -2235,7 +2405,7 @@ fragment float4 multilayerCompositeNormalBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return normalBlend(currentColor,textureColor);
+    return normalBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2289,7 +2459,7 @@ fragment float4 multilayerCompositeNormalBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return normalBlend(backgroundColor,textureColor);
+    return normalBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2343,7 +2513,7 @@ fragment float4 multilayerCompositeDarkenBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return darkenBlend(currentColor,textureColor);
+    return darkenBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2397,7 +2567,7 @@ fragment float4 multilayerCompositeDarkenBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return darkenBlend(backgroundColor,textureColor);
+    return darkenBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2451,7 +2621,7 @@ fragment float4 multilayerCompositeMultiplyBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return multiplyBlend(currentColor,textureColor);
+    return multiplyBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2505,7 +2675,7 @@ fragment float4 multilayerCompositeMultiplyBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return multiplyBlend(backgroundColor,textureColor);
+    return multiplyBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2559,7 +2729,7 @@ fragment float4 multilayerCompositeColorBurnBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorBurnBlend(currentColor,textureColor);
+    return colorBurnBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2613,7 +2783,7 @@ fragment float4 multilayerCompositeColorBurnBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorBurnBlend(backgroundColor,textureColor);
+    return colorBurnBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2667,7 +2837,7 @@ fragment float4 multilayerCompositeLinearBurnBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return linearBurnBlend(currentColor,textureColor);
+    return linearBurnBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2721,7 +2891,7 @@ fragment float4 multilayerCompositeLinearBurnBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return linearBurnBlend(backgroundColor,textureColor);
+    return linearBurnBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2775,7 +2945,7 @@ fragment float4 multilayerCompositeDarkerColorBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return darkerColorBlend(currentColor,textureColor);
+    return darkerColorBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2829,7 +2999,7 @@ fragment float4 multilayerCompositeDarkerColorBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return darkerColorBlend(backgroundColor,textureColor);
+    return darkerColorBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2883,7 +3053,7 @@ fragment float4 multilayerCompositeLightenBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return lightenBlend(currentColor,textureColor);
+    return lightenBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -2937,7 +3107,7 @@ fragment float4 multilayerCompositeLightenBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return lightenBlend(backgroundColor,textureColor);
+    return lightenBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -2991,7 +3161,7 @@ fragment float4 multilayerCompositeScreenBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return screenBlend(currentColor,textureColor);
+    return screenBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -3045,7 +3215,7 @@ fragment float4 multilayerCompositeScreenBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return screenBlend(backgroundColor,textureColor);
+    return screenBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -3099,7 +3269,7 @@ fragment float4 multilayerCompositeColorDodgeBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorDodgeBlend(currentColor,textureColor);
+    return colorDodgeBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -3153,7 +3323,7 @@ fragment float4 multilayerCompositeColorDodgeBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorDodgeBlend(backgroundColor,textureColor);
+    return colorDodgeBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -3207,7 +3377,7 @@ fragment float4 multilayerCompositeAddBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return addBlend(currentColor,textureColor);
+    return addBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -3261,7 +3431,7 @@ fragment float4 multilayerCompositeAddBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return addBlend(backgroundColor,textureColor);
+    return addBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -3315,7 +3485,7 @@ fragment float4 multilayerCompositeLighterColorBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return lighterColorBlend(currentColor,textureColor);
+    return lighterColorBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -3369,7 +3539,7 @@ fragment float4 multilayerCompositeLighterColorBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return lighterColorBlend(backgroundColor,textureColor);
+    return lighterColorBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -3423,7 +3593,7 @@ fragment float4 multilayerCompositeOverlayBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return overlayBlend(currentColor,textureColor);
+    return overlayBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -3477,7 +3647,7 @@ fragment float4 multilayerCompositeOverlayBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return overlayBlend(backgroundColor,textureColor);
+    return overlayBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -3531,7 +3701,7 @@ fragment float4 multilayerCompositeSoftLightBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return softLightBlend(currentColor,textureColor);
+    return softLightBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -3585,7 +3755,7 @@ fragment float4 multilayerCompositeSoftLightBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return softLightBlend(backgroundColor,textureColor);
+    return softLightBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -3639,7 +3809,7 @@ fragment float4 multilayerCompositeHardLightBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hardLightBlend(currentColor,textureColor);
+    return hardLightBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -3693,7 +3863,7 @@ fragment float4 multilayerCompositeHardLightBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hardLightBlend(backgroundColor,textureColor);
+    return hardLightBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -3747,7 +3917,7 @@ fragment float4 multilayerCompositeVividLightBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return vividLightBlend(currentColor,textureColor);
+    return vividLightBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -3801,7 +3971,7 @@ fragment float4 multilayerCompositeVividLightBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return vividLightBlend(backgroundColor,textureColor);
+    return vividLightBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -3855,7 +4025,7 @@ fragment float4 multilayerCompositeLinearLightBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return linearLightBlend(currentColor,textureColor);
+    return linearLightBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -3909,7 +4079,7 @@ fragment float4 multilayerCompositeLinearLightBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return linearLightBlend(backgroundColor,textureColor);
+    return linearLightBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -3963,7 +4133,7 @@ fragment float4 multilayerCompositePinLightBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return pinLightBlend(currentColor,textureColor);
+    return pinLightBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -4017,7 +4187,7 @@ fragment float4 multilayerCompositePinLightBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return pinLightBlend(backgroundColor,textureColor);
+    return pinLightBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -4071,7 +4241,7 @@ fragment float4 multilayerCompositeHardMixBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hardMixBlend(currentColor,textureColor);
+    return hardMixBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -4125,7 +4295,7 @@ fragment float4 multilayerCompositeHardMixBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hardMixBlend(backgroundColor,textureColor);
+    return hardMixBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -4179,7 +4349,7 @@ fragment float4 multilayerCompositeDifferenceBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return differenceBlend(currentColor,textureColor);
+    return differenceBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -4233,7 +4403,7 @@ fragment float4 multilayerCompositeDifferenceBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return differenceBlend(backgroundColor,textureColor);
+    return differenceBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -4287,7 +4457,7 @@ fragment float4 multilayerCompositeExclusionBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return exclusionBlend(currentColor,textureColor);
+    return exclusionBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -4341,7 +4511,7 @@ fragment float4 multilayerCompositeExclusionBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return exclusionBlend(backgroundColor,textureColor);
+    return exclusionBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -4395,7 +4565,7 @@ fragment float4 multilayerCompositeSubtractBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return subtractBlend(currentColor,textureColor);
+    return subtractBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -4449,7 +4619,7 @@ fragment float4 multilayerCompositeSubtractBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return subtractBlend(backgroundColor,textureColor);
+    return subtractBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -4503,7 +4673,7 @@ fragment float4 multilayerCompositeDivideBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return divideBlend(currentColor,textureColor);
+    return divideBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -4557,7 +4727,7 @@ fragment float4 multilayerCompositeDivideBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return divideBlend(backgroundColor,textureColor);
+    return divideBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -4611,7 +4781,7 @@ fragment float4 multilayerCompositeHueBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hueBlend(currentColor,textureColor);
+    return hueBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -4665,7 +4835,7 @@ fragment float4 multilayerCompositeHueBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return hueBlend(backgroundColor,textureColor);
+    return hueBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -4719,7 +4889,7 @@ fragment float4 multilayerCompositeSaturationBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return saturationBlend(currentColor,textureColor);
+    return saturationBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -4773,7 +4943,7 @@ fragment float4 multilayerCompositeSaturationBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return saturationBlend(backgroundColor,textureColor);
+    return saturationBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -4827,7 +4997,7 @@ fragment float4 multilayerCompositeColorBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorBlend(currentColor,textureColor);
+    return colorBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -4881,7 +5051,7 @@ fragment float4 multilayerCompositeColorBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return colorBlend(backgroundColor,textureColor);
+    return colorBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 
@@ -4935,7 +5105,7 @@ fragment float4 multilayerCompositeLuminosityBlend_programmableBlending(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return luminosityBlend(currentColor,textureColor);
+    return luminosityBlend(currentColor, textureColor, parameters.headroom);
 }
 
 #endif
@@ -4989,7 +5159,7 @@ fragment float4 multilayerCompositeLuminosityBlend(
             break;
     }
     textureColor.a *= parameters.opacity;
-    return luminosityBlend(backgroundColor,textureColor);
+    return luminosityBlend(backgroundColor, textureColor, parameters.headroom);
 }
 
 

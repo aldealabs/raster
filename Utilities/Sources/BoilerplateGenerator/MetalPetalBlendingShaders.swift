@@ -11,7 +11,12 @@ extension String {
 
 public struct MetalPetalBlendingShadersCodeGenerator {
     
-    static func generateMultilayerCompositeFilterFragmentShader(shaderFunctionName: String, blendFunctionName: String) -> String {
+    static func generateMultilayerCompositeFilterFragmentShader(
+        shaderFunctionName: String,
+        blendFunctionName: String,
+        usesHeadroom: Bool = false
+    ) -> String {
+        let headroomArgument = usesHeadroom ? ", parameters.headroom" : ""
         return """
         
         #if __HAVE_COLOR_ARGUMENTS__ && !TARGET_OS_SIMULATOR
@@ -64,7 +69,7 @@ public struct MetalPetalBlendingShadersCodeGenerator {
                     break;
             }
             textureColor.a *= parameters.opacity;
-            return \(blendFunctionName)(currentColor,textureColor);
+            return \(blendFunctionName)(currentColor, textureColor\(headroomArgument));
         }
         
         #endif
@@ -118,14 +123,20 @@ public struct MetalPetalBlendingShadersCodeGenerator {
                     break;
             }
             textureColor.a *= parameters.opacity;
-            return \(blendFunctionName)(backgroundColor,textureColor);
+            return \(blendFunctionName)(backgroundColor, textureColor\(headroomArgument));
         }
 
         
         """
     }
     
-    static func generateBlendFilterFragmentShader(shaderFunctionName: String, blendFunctionName: String) -> String {
+    static func generateBlendFilterFragmentShader(
+        shaderFunctionName: String,
+        blendFunctionName: String,
+        usesHeadroom: Bool = false
+    ) -> String {
+        let headroomParameter = usesHeadroom ? ",\n                                            constant float &headroom [[buffer(1)]]" : ""
+        let headroomArgument = usesHeadroom ? ", headroom" : ""
         return """
         
         fragment float4 \(shaderFunctionName)(VertexOut vertexIn [[ stage_in ]],
@@ -133,7 +144,7 @@ public struct MetalPetalBlendingShadersCodeGenerator {
                                             sampler colorSampler [[ sampler(0) ]],
                                             texture2d<float, access::sample> overlayTexture [[ texture(1) ]],
                                             sampler overlaySampler [[ sampler(1) ]],
-                                            constant float &intensity [[buffer(0)]]
+                                            constant float &intensity [[buffer(0)]]\(headroomParameter)
                                             ) {
             float4 uCb = colorTexture.sample(colorSampler, vertexIn.textureCoordinate);
             float2 textureCoordinate = vertexIn.textureCoordinate;
@@ -148,7 +159,7 @@ public struct MetalPetalBlendingShadersCodeGenerator {
             if (blend_filter_source_has_premultiplied_alpha) {
                 uCf = unpremultiply(uCf);
             }
-            float4 blendedColor = \(blendFunctionName)(uCb, uCf);
+            float4 blendedColor = \(blendFunctionName)(uCb, uCf\(headroomArgument));
             float4 output = mix(uCb,blendedColor,intensity);
             if (blend_filter_outputs_premultiplied_alpha) {
                 return premultiply(output);
@@ -183,7 +194,8 @@ public struct MetalPetalBlendingShadersCodeGenerator {
         
         for mode in blendModes {
             fileContent += generateBlendFilterFragmentShader(shaderFunctionName: mode.lowerCamelCased + "Blend",
-                                                             blendFunctionName: mode.lowerCamelCased + "Blend")
+                                                             blendFunctionName: mode.lowerCamelCased + "Blend",
+                                                             usesHeadroom: true)
         }
         
         fileContent += """
@@ -233,7 +245,8 @@ public struct MetalPetalBlendingShadersCodeGenerator {
         
         for mode in blendModes {
             fileContent += generateMultilayerCompositeFilterFragmentShader(shaderFunctionName: "multilayerComposite" + mode + "Blend",
-                                                                           blendFunctionName: mode.lowerCamelCased + "Blend")
+                                                                           blendFunctionName: mode.lowerCamelCased + "Blend",
+                                                                           usesHeadroom: true)
         }
         
         fileContent += """

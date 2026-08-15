@@ -30,6 +30,14 @@ __attribute__((objc_subclassing_restricted))
              outputTextureDimensions:(MTITextureDimensions)outputTextureDimensions
                    outputPixelFormat:(MTLPixelFormat)outputPixelFormat;
 
+- (MTIImage *)applyToBackgroundImage:(MTIImage *)image
+                              layers:(NSArray<MTILayer *> *)layers
+                   rasterSampleCount:(NSUInteger)rasterSampleCount
+                            headroom:(float)headroom
+                     outputAlphaType:(MTIAlphaType)outputAlphaType
+             outputTextureDimensions:(MTITextureDimensions)outputTextureDimensions
+                   outputPixelFormat:(MTLPixelFormat)outputPixelFormat;
+
 @end
 
 @class MTIRenderGraphNode;

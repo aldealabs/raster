@@ -12,6 +12,382 @@ import MetalPetalObjectiveC.Extension
 import VideoToolbox
 
 final class RenderTests: XCTestCase {
+
+    func testHDRBlendModeNames() {
+        XCTAssertEqual(canonicalBlendModes().map(\.rawValue), [
+            "Add", "Color", "ColorBurn", "ColorDodge", "Darken", "DarkerColor",
+            "Difference", "Divide", "Exclusion", "HardLight", "HardMix", "Hue",
+            "Lighten", "LighterColor", "LinearBurn", "LinearLight", "Luminosity",
+            "Multiply", "Normal", "Overlay", "PinLight", "Saturation", "Screen",
+            "SoftLight", "Subtract", "VividLight",
+        ])
+    }
+
+    func testHDRHeadroomPublicDefaultsAndAssignment() {
+        let blend = MTIBlendFilter(blendMode: .normal)
+        XCTAssertEqual(blend.headroom, 1)
+        blend.headroom = 4
+        XCTAssertEqual(blend.headroom, 4)
+
+        let objectiveCMultilayer = MTIMultilayerCompositingFilter()
+        XCTAssertEqual(objectiveCMultilayer.headroom, 1)
+        objectiveCMultilayer.headroom = 4
+        XCTAssertEqual(objectiveCMultilayer.headroom, 4)
+
+        let swiftMultilayer = MultilayerCompositingFilter()
+        XCTAssertEqual(swiftMultilayer.headroom, 1)
+        swiftMultilayer.headroom = 4
+        XCTAssertEqual(swiftMultilayer.headroom, 4)
+
+        let clahe = MTICLAHEFilter()
+        XCTAssertEqual(clahe.headroom, 1)
+        clahe.headroom = 4
+        XCTAssertEqual(clahe.headroom, 4)
+    }
+
+    func testHDRBlendModesPreserveLegacyHeadroomOneGoldens() throws {
+        let context = try makeContext()
+        let backdrop = floatImage([SIMD4<Float>(2, 1.5, 0.25, 1)], width: 1, height: 1)
+        let source = floatImage([SIMD4<Float>(0.5, 0.25, 0.75, 1)], width: 1, height: 1)
+        let goldens = legacyBlendGoldens()
+        XCTAssertEqual(goldens.count, 26)
+
+        for mode in canonicalBlendModes() {
+            let expected = try XCTUnwrap(goldens[mode.rawValue])
+            for headroom in [Float?.none, Float?(1)] {
+                for path in Task6BlendPath.allCases {
+                    let actual = try renderBlendPixel(
+                        mode: mode,
+                        backdrop: backdrop,
+                        source: source,
+                        headroom: headroom,
+                        path: path,
+                        context: context
+                    )
+                    assertPixel(
+                        actual,
+                        equals: expected,
+                        accuracy: 0.003,
+                        "\(mode.rawValue) \(path.rawValue), headroom \(headroom.map { String($0) } ?? "implicit")"
+                    )
+                }
+            }
+        }
+    }
+
+    func testHDRBlendModesRemainFiniteAndMatchMultilayerAtFour() throws {
+        let context = try makeContext()
+        let backdrop = floatImage([SIMD4<Float>(2, 1.5, 0.25, 1)], width: 1, height: 1)
+        let source = floatImage([SIMD4<Float>(0.5, 0.25, 0.75, 1)], width: 1, height: 1)
+
+        for mode in canonicalBlendModes() {
+            let individual = try renderBlendPixel(
+                mode: mode,
+                backdrop: backdrop,
+                source: source,
+                headroom: 4,
+                path: .individual,
+                context: context
+            )
+            let multilayer = try renderBlendPixel(
+                mode: mode,
+                backdrop: backdrop,
+                source: source,
+                headroom: 4,
+                path: .multilayer,
+                context: context
+            )
+            for (path, pixel) in [("individual", individual), ("multilayer", multilayer)] {
+                for (component, value) in zip(["r", "g", "b"], [pixel.x, pixel.y, pixel.z]) {
+                    XCTAssertTrue(value.isFinite, "\(mode.rawValue) \(path) \(component) is not finite")
+                    XCTAssertTrue((-0.003...4.003).contains(value), "\(mode.rawValue) \(path) \(component) is \(value)")
+                }
+                XCTAssertTrue(pixel.w.isFinite, "\(mode.rawValue) \(path) alpha is not finite")
+                XCTAssertTrue((-0.003...1.003).contains(pixel.w), "\(mode.rawValue) \(path) alpha is \(pixel.w)")
+            }
+            assertPixel(individual, equals: multilayer, accuracy: 0.003, "\(mode.rawValue) path parity")
+        }
+    }
+
+    func testHDRIndependentBlendFormulaReferences() throws {
+        let context = try makeContext()
+        let backdrop = floatImage([SIMD4<Float>(2, 1.5, 0.25, 1)], width: 1, height: 1)
+        let references: [(mode: MTIBlendMode, source: SIMD4<Float>, expected: SIMD4<Float>)] = [
+            (.add, SIMD4<Float>(0.5, 0.25, 0.75, 1), SIMD4<Float>(2.5, 1.75, 1, 1)),
+            (.multiply, SIMD4<Float>(1, 1, 1, 1), SIMD4<Float>(2, 1.5, 0.25, 1)),
+            (.screen, SIMD4<Float>(0.5, 0.75, 0.75, 1), SIMD4<Float>(1.5, 1.125, 0.8125, 1)),
+            (.colorDodge, SIMD4<Float>(0.5, 0.25, 0.75, 1), SIMD4<Float>(4, 2, 1, 1)),
+            (.divide, SIMD4<Float>(0.5, 0.25, 0.75, 1), SIMD4<Float>(4, 4, 1.0 / 3.0, 1)),
+            (.overlay, SIMD4<Float>(0.5, 0.25, 0.75, 1), SIMD4<Float>(2, 1.75, 0.375, 1)),
+            (.lighten, SIMD4<Float>(0.5, 0.25, 0.75, 1), SIMD4<Float>(2, 1.5, 0.75, 1)),
+            (.difference, SIMD4<Float>(0.5, 0.25, 0.75, 1), SIMD4<Float>(1.5, 1.25, 0.5, 1)),
+            (.color, SIMD4<Float>(0.5, 0.25, 0.75, 1), SIMD4<Float>(1.62525, 1.37525, 1.87525, 1)),
+        ]
+
+        for reference in references {
+            let source = floatImage([reference.source], width: 1, height: 1)
+            for path in Task6BlendPath.allCases {
+                let actual = try renderBlendPixel(
+                    mode: reference.mode,
+                    backdrop: backdrop,
+                    source: source,
+                    headroom: 4,
+                    path: path,
+                    context: context
+                )
+                assertPixel(actual, equals: reference.expected, accuracy: 0.003, "\(reference.mode.rawValue) \(path.rawValue)")
+            }
+        }
+    }
+
+    func testHDRTranslucentAddPreservesSourceOverAlphaAtFour() throws {
+        let context = try makeContext()
+        let backdrop = floatImage(
+            [SIMD4<Float>(2, 0, 0, 0.25)],
+            width: 1,
+            height: 1,
+            alphaType: .nonPremultiplied
+        )
+        let source = floatImage(
+            [SIMD4<Float>(0.5, 0, 0, 0.5)],
+            width: 1,
+            height: 1,
+            alphaType: .nonPremultiplied
+        )
+        let expected = SIMD4<Float>(1.2, 0, 0, 0.625)
+
+        for path in Task6BlendPath.allCases {
+            let actual = try renderBlendPixel(
+                mode: .add,
+                backdrop: backdrop,
+                source: source,
+                headroom: 4,
+                path: path,
+                outputAlphaType: .nonPremultiplied,
+                destinationAlphaType: .nonPremultiplied,
+                context: context
+            )
+            assertPixel(actual, equals: expected, accuracy: 0.003, "translucent Add \(path.rawValue)")
+        }
+    }
+
+    func testHDROptimizerPreservesHeadroomBoundary() throws {
+        let background = floatImage([SIMD4<Float>(0.8, 0.8, 0.8, 1)], width: 1, height: 1)
+        let source = floatImage([SIMD4<Float>(0.5, 0.5, 0.5, 1)], width: 1, height: 1)
+
+        let first = MultilayerCompositingFilter()
+        first.inputBackgroundImage = background
+        first.layers = [.init(content: source).blendMode(.add)]
+        first.headroom = 1
+        first.outputPixelFormat = .rgba16Float
+
+        let second = MultilayerCompositingFilter()
+        second.inputBackgroundImage = try XCTUnwrap(first.outputImage)
+        second.layers = [.init(content: source).blendMode(.add)]
+        second.headroom = 4
+        second.outputPixelFormat = .rgba16Float
+        let output = try XCTUnwrap(second.outputImage)
+
+        let unoptimizedOptions = MTIContextOptions()
+        unoptimizedOptions.enablesRenderGraphOptimization = false
+        let optimizedOptions = MTIContextOptions()
+        optimizedOptions.enablesRenderGraphOptimization = true
+        let unoptimized = try XCTUnwrap(renderFloatPixels(
+            output,
+            width: 1,
+            height: 1,
+            context: makeContext(options: unoptimizedOptions)
+        ).first)
+        let optimized = try XCTUnwrap(renderFloatPixels(
+            output,
+            width: 1,
+            height: 1,
+            context: makeContext(options: optimizedOptions)
+        ).first)
+        let expected = SIMD4<Float>(1.5, 1.5, 1.5, 1)
+        assertPixel(unoptimized, equals: expected, accuracy: 0.003, "unoptimized headroom boundary")
+        assertPixel(optimized, equals: expected, accuracy: 0.003, "optimized headroom boundary")
+    }
+
+    func testHDROptimizerPreservesHeadroomDuringLegalFusion() throws {
+        let background = floatImage([SIMD4<Float>(0.8, 0.8, 0.8, 1)], width: 1, height: 1)
+        let source = floatImage([SIMD4<Float>(0.5, 0.5, 0.5, 1)], width: 1, height: 1)
+
+        let first = MultilayerCompositingFilter()
+        first.inputBackgroundImage = background
+        first.layers = [.init(content: source).blendMode(.add)]
+        first.headroom = 4
+        first.outputPixelFormat = .rgba16Float
+
+        let second = MultilayerCompositingFilter()
+        second.inputBackgroundImage = try XCTUnwrap(first.outputImage)
+        second.layers = [.init(content: source).blendMode(.add)]
+        second.headroom = 4
+        second.outputPixelFormat = .rgba16Float
+        let output = try XCTUnwrap(second.outputImage)
+
+        let unoptimizedOptions = MTIContextOptions()
+        unoptimizedOptions.enablesRenderGraphOptimization = false
+        let optimizedOptions = MTIContextOptions()
+        optimizedOptions.enablesRenderGraphOptimization = true
+        let unoptimized = try XCTUnwrap(renderFloatPixels(
+            output,
+            width: 1,
+            height: 1,
+            context: makeContext(options: unoptimizedOptions)
+        ).first)
+        let optimized = try XCTUnwrap(renderFloatPixels(
+            output,
+            width: 1,
+            height: 1,
+            context: makeContext(options: optimizedOptions)
+        ).first)
+        let expected = SIMD4<Float>(1.8, 1.8, 1.8, 1)
+        assertPixel(unoptimized, equals: expected, accuracy: 0.003, "unoptimized legal fusion")
+        assertPixel(optimized, equals: expected, accuracy: 0.003, "optimized legal fusion")
+    }
+
+    func testHDRCustomTwoArgumentBlendFormulaCompatibility() throws {
+        let blendMode = MTIBlendMode(rawValue: "task6LegacyTwoArgumentBlend")
+        MTIBlendModes.registerBlendMode(blendMode, with: MTIBlendFunctionDescriptors(blendFormula: """
+        float4 blend(float4 backdrop, float4 source) {
+            return float4(backdrop.rgb + source.rgb, 1.0);
+        }
+        """))
+        defer {
+            MTIBlendModes.unregisterBlendMode(blendMode)
+        }
+
+        let context = try makeContext()
+        let backdrop = floatImage([SIMD4<Float>(2, 1.5, 0.25, 1)], width: 1, height: 1)
+        let source = floatImage([SIMD4<Float>(0.5, 0.25, 0.75, 1)], width: 1, height: 1)
+        let expected = SIMD4<Float>(2.5, 1.75, 1, 1)
+        for path in Task6BlendPath.allCases {
+            let actual = try renderBlendPixel(
+                mode: blendMode,
+                backdrop: backdrop,
+                source: source,
+                headroom: 4,
+                path: path,
+                context: context
+            )
+            assertPixel(actual, equals: expected, accuracy: 0.003, "legacy custom \(path.rawValue)")
+        }
+    }
+
+    func testCLAHEHeadroomPreservesSDRAndUsesFloatForHDR() throws {
+        let context = try makeContext()
+
+        let sdrFilter = MTICLAHEFilter()
+        sdrFilter.inputImage = claheFixture(headroom: 1)
+        sdrFilter.tileGridSize = MTICLAHESize(width: 2, height: 2)
+        sdrFilter.headroom = 1
+        XCTAssertEqual(sdrFilter.outputPixelFormat, .unspecified)
+        let sdrOutput = try XCTUnwrap(sdrFilter.outputImage?.withCachePolicy(.persistent))
+        let sdrResolution = try resolvedBufferAndTexture(for: sdrOutput, context: context)
+        XCTAssertEqual(sdrResolution.texture.pixelFormat, .bgra8Unorm)
+        let sdrBytes = try readBGRA8Pixels(from: sdrResolution.texture, context: context)
+        let sdrGolden: [[UInt8]] = [
+            [16, 32, 41, 39, 33, 35, 46, 62],
+            [78, 94, 104, 102, 96, 97, 108, 124],
+            [122, 135, 144, 144, 138, 138, 148, 162],
+            [125, 135, 142, 142, 138, 138, 145, 154],
+            [106, 116, 122, 121, 117, 118, 126, 136],
+            [102, 116, 125, 123, 118, 119, 130, 144],
+            [143, 159, 169, 167, 161, 163, 175, 191],
+            [207, 223, 233, 231, 225, 227, 239, 255],
+        ]
+        for row in 0..<8 {
+            for column in 0..<8 {
+                let offset = (row * 8 + column) * 4
+                let expected = sdrGolden[row][column]
+                XCTAssertEqual(Array(sdrBytes[offset..<(offset + 4)]), [expected, expected, expected, 255], "SDR CLAHE pixel (\(column), \(row))")
+            }
+        }
+
+        let hdrFilter = MTICLAHEFilter()
+        hdrFilter.inputImage = claheFixture(headroom: 4)
+        hdrFilter.tileGridSize = MTICLAHESize(width: 2, height: 2)
+        hdrFilter.headroom = 4
+        XCTAssertEqual(hdrFilter.outputPixelFormat, .unspecified)
+        let hdrOutput = try XCTUnwrap(hdrFilter.outputImage?.withCachePolicy(.persistent))
+        let hdrResolution = try resolvedBufferAndTexture(for: hdrOutput, context: context)
+        XCTAssertEqual(hdrResolution.texture.pixelFormat, .rgba16Float)
+        let hdrPixels = try renderFloatPixels(hdrResolution.buffer, width: 8, height: 8, context: context)
+        var containsHighlight = false
+        for pixel in hdrPixels {
+            for value in [pixel.x, pixel.y, pixel.z] {
+                XCTAssertTrue(value.isFinite)
+                XCTAssertTrue((0...4).contains(value), "HDR CLAHE component is \(value)")
+                containsHighlight = containsHighlight || value > 1.01
+            }
+            XCTAssertTrue(pixel.w.isFinite)
+            XCTAssertTrue((0...1).contains(pixel.w), "HDR CLAHE alpha is \(pixel.w)")
+        }
+        XCTAssertTrue(containsHighlight)
+
+        let normalizedFilter = MTICLAHEFilter()
+        normalizedFilter.inputImage = claheFixture(headroom: 1)
+        normalizedFilter.tileGridSize = MTICLAHESize(width: 2, height: 2)
+        normalizedFilter.headroom = 1
+        normalizedFilter.outputPixelFormat = .rgba16Float
+        let normalizedOutput = try XCTUnwrap(normalizedFilter.outputImage)
+        let normalizedPixels = try renderFloatPixels(normalizedOutput, width: 8, height: 8, context: context)
+        XCTAssertEqual(normalizedPixels.count, hdrPixels.count)
+        for (index, pair) in zip(normalizedPixels, hdrPixels).enumerated() {
+            assertPixel(
+                pair.1 / SIMD4<Float>(4, 4, 4, 1),
+                equals: pair.0,
+                accuracy: 0.003,
+                "normalized HDR CLAHE pixel \(index)"
+            )
+        }
+
+        let explicitFormats: [(headroom: Float, pixelFormat: MTLPixelFormat)] = [
+            (1, .rgba16Float),
+            (4, .bgra8Unorm),
+        ]
+        for setting in explicitFormats {
+            let filter = MTICLAHEFilter()
+            filter.inputImage = claheFixture(headroom: setting.headroom)
+            filter.tileGridSize = MTICLAHESize(width: 2, height: 2)
+            filter.headroom = setting.headroom
+            filter.outputPixelFormat = setting.pixelFormat
+            let output = try XCTUnwrap(filter.outputImage?.withCachePolicy(.persistent))
+            let resolution = try resolvedBufferAndTexture(for: output, context: context)
+            XCTAssertEqual(resolution.texture.pixelFormat, setting.pixelFormat)
+        }
+    }
+
+    func testCLAHEHeadroomNormalizesChromaticInput() throws {
+        let context = try makeContext()
+
+        func render(headroom: Float) throws -> [SIMD4<Float>] {
+            let filter = MTICLAHEFilter()
+            filter.inputImage = claheChromaticFixture(headroom: headroom)
+            filter.tileGridSize = MTICLAHESize(width: 2, height: 2)
+            filter.headroom = headroom
+            filter.outputPixelFormat = .rgba16Float
+            return try renderFloatPixels(
+                XCTUnwrap(filter.outputImage),
+                width: 8,
+                height: 8,
+                context: context
+            )
+        }
+
+        let sdrPixels = try render(headroom: 1)
+        let hdrPixels = try render(headroom: 4)
+        XCTAssertEqual(sdrPixels.count, hdrPixels.count)
+        for (index, pair) in zip(sdrPixels, hdrPixels).enumerated() {
+            assertPixel(
+                pair.1 / SIMD4<Float>(4, 4, 4, 1),
+                equals: pair.0,
+                accuracy: 0.003,
+                "normalized chromatic CLAHE pixel \(index)"
+            )
+        }
+    }
     
     func testSolidColorImageRendering() throws {
         let image = MTIImage(color: MTIColor(red: 1, green: 0, blue: 0, alpha: 1), sRGB: false, size: CGSize(width: 2, height: 2))
@@ -2001,6 +2377,238 @@ final class RenderTests: XCTestCase {
 }
 
 extension RenderTests {
+
+    private enum Task6BlendPath: String, CaseIterable {
+        case individual
+        case multilayer
+    }
+
+    private func canonicalBlendModes() -> [MTIBlendMode] {
+        MTIBlendModes.all
+            .filter { $0 != .colorLookup512x512 }
+            .sorted { $0.rawValue < $1.rawValue }
+    }
+
+    private func legacyBlendGoldens() -> [String: SIMD4<Float>] {
+        [
+            "Add": SIMD4<Float>(1, 1, 1, 1),
+            "Color": SIMD4<Float>(1, 1, 1, 1),
+            "ColorBurn": SIMD4<Float>(1, 1, 0, 1),
+            "ColorDodge": SIMD4<Float>(1, 1, 1, 1),
+            "Darken": SIMD4<Float>(0.5, 0.25, 0.25, 1),
+            "DarkerColor": SIMD4<Float>(0.5, 0.25, 0.75, 1),
+            "Difference": SIMD4<Float>(1, 1, 0.5, 1),
+            "Divide": SIMD4<Float>(1, 1, 0.33325195, 1),
+            "Exclusion": SIMD4<Float>(0.5, 1, 0.625, 1),
+            "HardLight": SIMD4<Float>(1, 0.75, 0.625, 1),
+            "HardMix": SIMD4<Float>(1, 1, 0.5, 1),
+            "Hue": SIMD4<Float>(1, 1, 1, 1),
+            "Lighten": SIMD4<Float>(1, 1, 0.75, 1),
+            "LighterColor": SIMD4<Float>(1, 1, 0.25, 1),
+            "LinearBurn": SIMD4<Float>(1, 0.75, 0, 1),
+            "LinearLight": SIMD4<Float>(1, 1, 0.75, 1),
+            "Luminosity": SIMD4<Float>(0.53125, 0.37939453, 0, 1),
+            "Multiply": SIMD4<Float>(1, 0.375, 0.1875, 1),
+            "Normal": SIMD4<Float>(0.5, 0.25, 0.75, 1),
+            "Overlay": SIMD4<Float>(1, 1, 0.375, 1),
+            "PinLight": SIMD4<Float>(1, 0.5, 0.5, 1),
+            "Saturation": SIMD4<Float>(1, 1, 1, 1),
+            "Screen": SIMD4<Float>(1, 1, 0.8125, 1),
+            "SoftLight": SIMD4<Float>(1, 1, 0.375, 1),
+            "Subtract": SIMD4<Float>(1, 1, 0, 1),
+            "VividLight": SIMD4<Float>(1, 1, 0.5, 1),
+        ]
+    }
+
+    private func renderBlendPixel(
+        mode: MTIBlendMode,
+        backdrop: MTIImage,
+        source: MTIImage,
+        headroom: Float?,
+        path: Task6BlendPath,
+        outputAlphaType: MTIAlphaType = .nonPremultiplied,
+        destinationAlphaType: MTIAlphaType = .alphaIsOne,
+        context: MTIContext
+    ) throws -> SIMD4<Float> {
+        let output: MTIImage
+        switch path {
+        case .individual:
+            let filter = MTIBlendFilter(blendMode: mode)
+            filter.inputBackgroundImage = backdrop
+            filter.inputImage = source
+            if let headroom = headroom {
+                filter.headroom = headroom
+            }
+            filter.outputAlphaType = outputAlphaType
+            filter.outputPixelFormat = .rgba16Float
+            output = try XCTUnwrap(filter.outputImage)
+        case .multilayer:
+            let filter = MultilayerCompositingFilter()
+            filter.inputBackgroundImage = backdrop
+            filter.layers = [.init(content: source).blendMode(mode)]
+            if let headroom = headroom {
+                filter.headroom = headroom
+            }
+            filter.outputAlphaType = outputAlphaType
+            filter.outputPixelFormat = .rgba16Float
+            output = try XCTUnwrap(filter.outputImage)
+        }
+        return try XCTUnwrap(renderFloatPixels(
+            output,
+            width: 1,
+            height: 1,
+            context: context,
+            destinationAlphaType: destinationAlphaType
+        ).first)
+    }
+
+    private func assertPixel(
+        _ actual: SIMD4<Float>,
+        equals expected: SIMD4<Float>,
+        accuracy: Float,
+        _ message: String,
+        file: StaticString = #file,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(actual.x, expected.x, accuracy: accuracy, "\(message) red", file: file, line: line)
+        XCTAssertEqual(actual.y, expected.y, accuracy: accuracy, "\(message) green", file: file, line: line)
+        XCTAssertEqual(actual.z, expected.z, accuracy: accuracy, "\(message) blue", file: file, line: line)
+        XCTAssertEqual(actual.w, expected.w, accuracy: accuracy, "\(message) alpha", file: file, line: line)
+    }
+
+    private func claheFixture(headroom: Float) -> MTIImage {
+        let pixels = (0..<64).map { index -> SIMD4<Float> in
+            let value = Float(index + 1) / 64 * headroom
+            return SIMD4<Float>(value, value, value, 1)
+        }
+        return floatImage(pixels, width: 8, height: 8)
+    }
+
+    private func claheChromaticFixture(headroom: Float) -> MTIImage {
+        let pixels = (0..<64).map { index -> SIMD4<Float> in
+            let x = index % 8
+            let y = index / 8
+            let red = Float(x + 1) / 9
+            let green = Float(y + 1) / 9
+            let blue = Float((x * 3 + y * 5) % 8 + 1) / 9
+            return SIMD4<Float>(red * headroom, green * headroom, blue * headroom, 1)
+        }
+        return floatImage(pixels, width: 8, height: 8)
+    }
+
+    private func resolvedBufferAndTexture(
+        for image: MTIImage,
+        context: MTIContext
+    ) throws -> (buffer: MTIImage, texture: MTLTexture) {
+        let task = try context.startTask(toRender: image, completion: nil)
+        task.waitUntilCompleted()
+        if let error = task.error {
+            throw error
+        }
+        let buffer = try XCTUnwrap(context.renderedBuffer(for: image))
+        let texture = try XCTUnwrap(buffer.value(forKeyPath: "promise.resolution.renderTarget.texture") as? MTLTexture)
+        return (buffer, texture)
+    }
+
+    private func floatImage(
+        _ pixels: [SIMD4<Float>],
+        width: Int,
+        height: Int,
+        alphaType: MTIAlphaType = .alphaIsOne
+    ) -> MTIImage {
+        precondition(pixels.count == width * height)
+        let data = pixels.withUnsafeBytes { Data($0) }
+        return MTIImage(
+            bitmapData: data,
+            width: UInt(width),
+            height: UInt(height),
+            bytesPerRow: UInt(width * MemoryLayout<SIMD4<Float>>.stride),
+            pixelFormat: .rgba32Float,
+            alphaType: alphaType
+        )
+    }
+
+    private func renderFloatPixels(
+        _ image: MTIImage,
+        width: Int,
+        height: Int,
+        context: MTIContext,
+        destinationAlphaType: MTIAlphaType = .alphaIsOne
+    ) throws -> [SIMD4<Float>] {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba32Float,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.storageMode = .shared
+        descriptor.usage = [.shaderRead, .shaderWrite, .renderTarget]
+        let texture = try XCTUnwrap(context.device.makeTexture(descriptor: descriptor))
+        let task = try context.startTask(
+            toRender: image,
+            to: texture,
+            destinationAlphaType: destinationAlphaType
+        )
+        task.waitUntilCompleted()
+        if let error = task.error {
+            throw error
+        }
+        var pixels = [SIMD4<Float>](repeating: .zero, count: width * height)
+        pixels.withUnsafeMutableBytes { bytes in
+            texture.getBytes(
+                bytes.baseAddress!,
+                bytesPerRow: width * MemoryLayout<SIMD4<Float>>.stride,
+                from: MTLRegionMake2D(0, 0, width, height),
+                mipmapLevel: 0
+            )
+        }
+        return pixels
+    }
+
+    private func readBGRA8Pixels(from texture: MTLTexture, context: MTIContext) throws -> [UInt8] {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: texture.width,
+            height: texture.height,
+            mipmapped: false
+        )
+        #if os(macOS) || targetEnvironment(macCatalyst)
+        descriptor.storageMode = .managed
+        #endif
+        let cpuTexture = try XCTUnwrap(context.device.makeTexture(descriptor: descriptor))
+        let commandBuffer = try XCTUnwrap(context.commandQueue.makeCommandBuffer())
+        let encoder = try XCTUnwrap(commandBuffer.makeBlitCommandEncoder())
+        encoder.copy(
+            from: texture,
+            sourceSlice: 0,
+            sourceLevel: 0,
+            sourceOrigin: .init(x: 0, y: 0, z: 0),
+            sourceSize: .init(width: texture.width, height: texture.height, depth: 1),
+            to: cpuTexture,
+            destinationSlice: 0,
+            destinationLevel: 0,
+            destinationOrigin: .init(x: 0, y: 0, z: 0)
+        )
+        #if os(macOS) || targetEnvironment(macCatalyst)
+        encoder.synchronize(resource: cpuTexture)
+        #endif
+        encoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+        if let error = commandBuffer.error {
+            throw error
+        }
+        var pixels = [UInt8](repeating: 0, count: texture.width * texture.height * 4)
+        pixels.withUnsafeMutableBytes { bytes in
+            cpuTexture.getBytes(
+                bytes.baseAddress!,
+                bytesPerRow: texture.width * 4,
+                from: MTLRegionMake2D(0, 0, texture.width, texture.height),
+                mipmapLevel: 0
+            )
+        }
+        return pixels
+    }
     
     @available(iOS 13.0, tvOS 13.0, *)
     private func runRoundCornerTest(size: Int, curve: MTICornerCurve, allowedDifference: Int) throws {
